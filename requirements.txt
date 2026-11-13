@@ -1,0 +1,12 @@
+Pillow>=10.0
+ttkbootstrap>=1.10
+
+# LK 修补：AArch64 反汇编（ARM32 特征码匹配不需要）
+capstone>=5
+
+# 可选：拖拽载入（缺失时自动降级）
+# tkinterdnd2>=0.4
+
+# 开发/测试
+# pytest>=8
+# pyinstaller>=6

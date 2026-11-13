@@ -1,0 +1,62 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+
+# ── 原版软件分发包 / 解包目录（本地样本，不入库）─────────
+LogoBuilder_jb51/
+LogoBuilder_jb51.rar
+src_orig/
+
+# ── 真机固件样本（仅本地分析，不随仓库分发）──────────────
+analysis/lk/samples/
+analysis/lk/_*.txt
+analysis/lk/tools/refs/
+analysis/external/
+analysis/staging/
+
+# ── 逆向过程产物（可重新生成，且含原软件受版权内容）──────
+analysis/decompiled/
+analysis/il/
+analysis/resources/
+analysis/rea/
+analysis/tools/
+analysis/verify/
+analysis/decrypted_strings_clean.txt
+analysis/publish/
+analysis/format/extracted/
+analysis/format/extracted_lk/
+analysis/format/scratch/
+analysis/format/*.bin
+analysis/format/hdrprobe_dir/
+analysis/ui_screenshots/
+analysis/qa/artifacts/
+
+# ── 第三方逆向工具二进制（体积大，可重新下载）────────────
+tools/ilspy/ilspy40/
+tools/ilspy/*.zip
+tools/ilspy/rels.json
+tools/ilspy/*.nupkg
+tools/ilspy/rel.json
+
+# ── 合成测试语料（由 tests/conftest.py 自动生成）──────────
+tests/fixtures/generated/
+tests/fixtures/generated_lk/
+tests/fixtures/__pycache__/
+
+# ── 构建/临时 ────────────────────────────────────────────
+*.log
+*.tmp
+out/
+.DS_Store
+
+# 测试/使用过程中生成的 LK 备份与补丁输出（根目录散落）
+lk_*_original_backup*.bin
+lk_*_patched*.bin
+*_original_backup*.bin
+*_patched.bin

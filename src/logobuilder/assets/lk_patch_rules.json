@@ -1,0 +1,165 @@
+{
+  "format": "logobuilder-lk-patch-rules",
+  "version": 2,
+  "description": "MTK LK 引导程序警告修补规则（ARM32 Thumb-2 精确特征码 + AArch64 启发式检测参数）。事实来源见 docs/spec_lkpatch.md 第 1/3 节；本项目独立实现，不复制 GPL 代码。",
+  "arm32": {
+    "patch": "00207047",
+    "patch_description": "movs r0,#0; bx lr（Thumb），函数入口立即返回 0",
+    "rules": [
+      {
+        "category": "orange_state",
+        "pattern": "08b50a4b7b441b681b68022b",
+        "patch": "00207047",
+        "description": "A10+ 开机状态警告分发器（push; ldr; add pc; ldr; ldr; cmp #2）",
+        "source": "社区公开特征码（Hovatek / lkpatcher 事实数据，见 spec §1）"
+      },
+      {
+        "category": "orange_state",
+        "pattern": "08b50e4b7b441b681b68022b",
+        "patch": "00207047",
+        "description": "A10+ 分发器变体",
+        "source": "社区公开特征码（Hovatek / lkpatcher 事实数据）"
+      },
+      {
+        "category": "orange_state",
+        "pattern": "08b50a4b7b441b681b68012b",
+        "patch": "00207047",
+        "description": "Android 10 以前的分发器（cmp #1）",
+        "source": "社区公开特征码（Hovatek / lkpatcher 事实数据）"
+      },
+      {
+        "category": "orange_state",
+        "pattern": "08b50e4b7b441b681b68012b",
+        "patch": "00207047",
+        "description": "Android 10 以前分发器变体",
+        "source": "社区公开特征码（Hovatek / lkpatcher 事实数据）"
+      },
+      {
+        "category": "red_state",
+        "pattern": "f0b5002489b0",
+        "patch": "00207047",
+        "description": "验证失败（Red State）警告函数",
+        "source": "社区公开特征码（Hovatek / lkpatcher 事实数据）"
+      },
+      {
+        "category": "dm_verity",
+        "pattern": "30b583b002ab0022",
+        "patch": "00207047",
+        "description": "dm-verity / vbmeta 检查函数",
+        "source": "社区公开特征码（Hovatek / lkpatcher 事实数据）"
+      },
+      {
+        "category": "dm_verity",
+        "pattern": "022800d0704738b53224e0f7",
+        "patch": "00207047",
+        "description": "dm-verity 变体",
+        "source": "社区公开特征码（Hovatek / lkpatcher 事实数据）"
+      }
+    ]
+  },
+  "aarch64": {
+    "patch": "e0031f2ac0035fd6",
+    "patch_description": "mov w0, wzr; ret（LE），函数入口立即返回 0",
+    "max_backtrack": 1024,
+    "ref_delta_max": 8,
+    "prologue_hints": [
+      "stp x29, x30, [sp, #-imm]!",
+      "sub sp, sp, #imm"
+    ],
+    "entry_mnemonics": [
+      "bl",
+      "b",
+      "stp",
+      "sub",
+      "mrs",
+      "ret"
+    ],
+    "delay_constants": [
+      5000000,
+      5000,
+      100000,
+      200000,
+      3200000
+    ],
+    "min_confidence": 0.6,
+    "min_selected_confidence": 0.8,
+    "warning_ref_texts": [
+      "Orange State",
+      "OS Not Being Verified Or Custom OS. Dismiss After 5 Seconds.",
+      "Red State",
+      "Device Cannot Boot. Enter Repair Mode.",
+      "Dismiss After 5 Seconds.",
+      "Dismiss After 5 Seconds",
+      "dm-verity corruption",
+      "Your device is corrupt.",
+      "It can't be trusted and may not work properly.",
+      "Device will continue to bootup in %ds",
+      "Device will continue to bootup",
+      "Device occur dm vertity corruption",
+      "tran_dm_fix=1",
+      "Your device has been unlocked",
+      "Your device has failed verification",
+      "dm-verity",
+      "dm_verity",
+      "5 seconds"
+    ],
+    "warning_display_texts": [
+      "Orange State",
+      "OS Not Being Verified Or Custom OS. Dismiss After 5 Seconds.",
+      "Red State",
+      "Device Cannot Boot. Enter Repair Mode.",
+      "Dismiss After 5 Seconds.",
+      "dm-verity corruption",
+      "Your device is corrupt.",
+      "It can't be trusted and may not work properly.",
+      "Device will continue to bootup in %ds",
+      "Device occur dm vertity corruption",
+      "Your device has been unlocked",
+      "Your device has failed verification"
+    ],
+    "orange_tokens": [
+      "orange"
+    ],
+    "red_tokens": [
+      "red state",
+      "failed verification",
+      "device cannot boot"
+    ],
+    "dm_tokens": [
+      "dm-verity",
+      "dm_verity",
+      "verity",
+      "corrupt",
+      "it can't be trusted",
+      "vertity"
+    ],
+    "state_mapping_note": "真实样本逆向：w8==1/3 走 Red 路径，w8==2 走 Orange 路径；两条路径共用同一分发器入口，补丁在入口提前 return。",
+    "category_confidence": {
+      "orange_state_full": 0.98,
+      "orange_state": 0.9,
+      "orange_state_weak": 0.65,
+      "red_state": 0.85,
+      "dm_verity_full": 0.95,
+      "dm_verity": 0.88,
+      "dm_verity_weak": 0.65
+    },
+    "expected_delay": {
+      "orange_state": 5000000,
+      "dm_verity": 100000
+    },
+    "expected_delay_count": {
+      "dm_verity": 30
+    }
+  },
+  "guard_patterns": [
+    "androidboot.",
+    "verifiedbootstate",
+    "veritymode",
+    "androidboot.atm"
+  ],
+  "safety": {
+    "max_file_size": 134217728,
+    "require_unique_arm32_match": true,
+    "ignore_guard_params_change": false
+  }
+}

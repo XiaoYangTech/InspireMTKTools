@@ -1,0 +1,410 @@
+{
+  "format": "logobuilder-lk-patch-rules",
+  "version": 1,
+  "meta": {
+    "project": "亿方联发科工具箱 / InspireMTKTools",
+    "generated_by": "lk-analyst (task-7)",
+    "spec": "docs/spec_lkpatch.md §3.4 / §5",
+    "generated_at": "2026-11-13",
+    "semantics": {
+      "payload_coordinate": "all offsets in `evidence` are payload offsets (0 = first byte after the 512-byte MTK header); file offset = payload offset + 0x200 for container images",
+      "needle_mask": "same length as needle in hex; each byte pair 'ff' = must match, '00' = wildcard; omitted = exact match",
+      "patch_offset": "byte offset from the needle start where `patch` is written; all ARM32 rules patch at 0",
+      "patch_semantics_arm32": "00207047 = Thumb `movs r0,#0; bx lr` (shortest, same as lkpatcher default)",
+      "patch_semantics_arm32_pushpop": "08b5002008bd = Thumb `push {r3,lr}; movs r0,#0; pop {r3,pc}` (补丁 A, preserves the original push/pop framing; only valid when the stock first instruction is 08b5)",
+      "patch_semantics_aarch64": "e0031f2ac0035fd6 = `mov w0, wzr; ret` (8 bytes at function entry)"
+    },
+    "mtk_layout_verified": {
+      "header_magic": "0x58881688",
+      "size_field_semantics": "payload length in bytes (the bytes that start at 0x200). VERIFIED: the next packed sub-image header (magic 0x58881688, name 'cert1') starts exactly at file offset 0x200+size = 0xD49D0. NOTE: docs/spec_lkpatch.md §2 called this '有效负载长度' which is correct, but some third-party code (tfast lk_image.py payload_of) slices data[0x200:size], which drops the last 512 payload bytes on these packed images.",
+      "payload_slice": "payload = file[0x200 : 0x200 + size]",
+      "container_layout": "the 4 MB lk_a/lk_b file is a packed MTK lk partition: 12 concatenated sub-images with a 0x200 header each, 16-byte aligned: lk(payload 0xD47D0) @0x0, cert1 @0xD49D0, cert2 @0xD52A0, bl2_ext @0xD5880, cert1 @0x16AAE0, cert2 @0x16B3B0, aee @0x16B990, cert1 @0x231C60, cert2 @0x232530, lk_main_dtb @0x232B10, cert1 @0x265500, cert2 @0x265DD0. It is NOT 'payload + zero padding to 4 MB'.",
+      "do_not_patch": "only the warning functions inside the first sub-image (lk) payload are modified; never touch the cert1/cert2 signature blobs, bl2_ext, aee or lk_main_dtb sub-images, and never rewrite the 0x200 header"
+    },
+    "sources": {
+      "lkpatcher": "analysis/external/lkpatcher/patches.json + lkpatcher__patcher.py DEFAULT_PATCHES (R0rt1z2/lkpatcher, GPL-3.0; only feature-code facts used, no code copied)",
+      "modlk": "analysis/external/modlk_warn/lk_core.py SIG_PRE_A10/SIG_A10PLUS/PATCH_A_LEAD + README.zh-CN.md (programmersd21/modlk, MIT; method source Hovatek thread-31664)",
+      "hovatek": "https://www.hovatek.com/forum/thread-31664.html (community tutorial: search 7B441B681B68012B / 7B441B681B68022B, require preceding 08B5????)",
+      "tfast": "analysis/lk/tools/refs/tfast_lk_image.py (copy of tfastdigital/tfast-mtk-bootloader-tool bl_core/lk_image.py, proprietary license — see tools/refs/tfast_LICENSE.md; independently uses the same `E0 03 1F 2A C0 03 5F D6` = mov w0,wzr; ret stub for AArch64 LK patches; sample provenance only, no code copied)",
+      "self_analysis": "independent capstone disassembly of analysis/lk/samples/lk_a.bin, lk_b.bin, lk_a.unlocked.bin (see analysis/lk/lk_a64_analysis.md and analysis/lk/_evidence_a64.txt)"
+    },
+    "verified_samples": {
+      "lk_a.bin": {
+        "sha256": "bb2f2e6a6f7b7603dee3de08dc09e29dd74da49bd4cb98f20e8be648ba66f873",
+        "payload_sha256": "4f7fa9fadcbc93cc7fab663165a3e30b7bcb10d4aa2e81832515298915f6707e",
+        "file_size": 4194304,
+        "payload_size": 870352,
+        "arch": "aarch64",
+        "findings": {
+          "orange_state": {"payload": "0x4d728", "file": "0x4d928"},
+          "dm_verity": {"payload": "0x4ca58", "file": "0x4cc58"}
+        }
+      },
+      "lk_b.bin": {
+        "sha256": "f4ecd3eed32f6f8ce112115af11b054de14bf01a8d6cab7d12b31bd9051aa6e4",
+        "payload_sha256": "2eae0a2d2abb5dae5aa97378ce8eb3b2f3861715f6e55acfda1d8e9882b9d508",
+        "file_size": 4194304,
+        "payload_size": 870352,
+        "arch": "aarch64",
+        "findings": {
+          "orange_state": {"payload": "0x4d728", "file": "0x4d928"},
+          "dm_verity": {"payload": "0x4ca58", "file": "0x4cc58"}
+        },
+        "note": "B 槽；与 lk_a 有 92 个差异区间/2955 字节差异，但两个警告函数逐字节相同（B 槽必须一起刷）"
+      },
+      "lk_a.unlocked.bin": {
+        "sha256": "ba5c57ebb1614784882b50eb05b237d42badf1f809c94b2a4c7c954f73b4518f",
+        "payload_sha256": "06bdc92baf468d9b3d33efebe3e7b9de0b85336647cd5fa8f0f9da301fdf5ffe",
+        "file_size": 4194304,
+        "payload_size": 870352,
+        "arch": "aarch64",
+        "findings": {
+          "orange_state": {"payload": "0x4d728", "file": "0x4d928"},
+          "dm_verity": {"payload": "0x4ca58", "file": "0x4cc58"}
+        },
+        "note": "第三方解锁工具（tfast）输出的 unlocked 变体：它只改 0x6ae8/0x6ec8/0x2af1c/0x78fec/0x795e8 等解锁相关点，未触碰两个警告函数；用于证明警告函数与解锁无关，也证明 `mov w0,wzr; ret` 是真实工具使用的补丁风格"
+      }
+    },
+    "aarch64_verified_string_offsets_lk_a": {
+      "orange_path_state_2": {
+        "Orange State\\n\\n": "0xacbdb",
+        "OS Not Being Verified Or Custom OS. Dismiss After 5 Seconds.\\n": "0xacbea"
+      },
+      "red_path_state_1_and_3": {
+        "Red State\\n\\n": "0xacc28",
+        "Dismiss After 5 Seconds.\\n": "0xacc0e",
+        "Device Cannot Boot. Enter Repair Mode.": "0xacc34"
+      },
+      "dm_verity_function": {
+        "dm-verity corruption\\n\\n": "0xac6a3",
+        "Your device is corrupt.\\n": "0xac6ba",
+        "It can't be trusted and may not work properly.\\n": "0xac6d3",
+        "Device will continue to bootup in %ds\\n": "0xac703",
+        "tran_dm_fix=1": "0xac72a",
+        "Device occur dm vertity corruption\\n": "0xac738"
+      },
+      "boot_state_names_table_payload": "0xacc90 (4 x encoded pointer 0xffff0000_50f00000+off: 0=green 1=yellow 2=orange 3=red)"
+    }
+  },
+  "patch": {
+    "arm32": "00207047",
+    "arm32_pushpop": "08b5002008bd",
+    "aarch64": "e0031f2ac0035fd6"
+  },
+  "guard_strings": [
+    "androidboot.",
+    "androidboot.verifiedbootstate",
+    "androidboot.veritymode",
+    "androidboot.atm",
+    "vbmeta",
+    "avb"
+  ],
+  "rules": [
+    {
+      "id": "arm32-orange-state-a10plus-0a4b",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b50a4b7b441b681b68022b",
+      "patch": "00207047",
+      "patch_offset": 0,
+      "confidence": 0.9,
+      "description": "Android 10+ 警告分发器（ldr/add pc/ldr/cmp #2 链，0a4b 变体）；补丁后函数直接 return 0，Orange/Red 文本与 5 秒等待一起消失",
+      "source": "lkpatcher patches.json orange_state (GPL-3.0, feature facts); modlk SIG_A10PLUS (MIT); Hovatek thread-31664"
+    },
+    {
+      "id": "arm32-orange-state-a10plus-0e4b",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b50e4b7b441b681b68022b",
+      "patch": "00207047",
+      "patch_offset": 0,
+      "confidence": 0.9,
+      "description": "Android 10+ 警告分发器（0e4b 变体，仅字面量池偏移不同）",
+      "source": "lkpatcher patches.json orange_state; Hovatek thread-31664"
+    },
+    {
+      "id": "arm32-orange-state-pre-a10-0a4b",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b50a4b7b441b681b68012b",
+      "patch": "00207047",
+      "patch_offset": 0,
+      "confidence": 0.9,
+      "description": "Android 10 以前警告分发器（cmp #1 链，0a4b 变体）",
+      "source": "modlk SIG_PRE_A10 (MIT); Hovatek thread-31664; docs/spec_lkpatch.md §3.4"
+    },
+    {
+      "id": "arm32-orange-state-pre-a10-0e4b",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b50e4b7b441b681b68012b",
+      "patch": "00207047",
+      "patch_offset": 0,
+      "confidence": 0.9,
+      "description": "Android 10 以前警告分发器（0e4b 变体）",
+      "source": "modlk SIG_PRE_A10 (MIT); docs/spec_lkpatch.md §3.4"
+    },
+    {
+      "id": "arm32-orange-state-a10plus-generic",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b500007b441b681b68022b",
+      "needle_mask": "ffff0000ffffffffffffffff",
+      "patch": "00207047",
+      "patch_offset": 0,
+      "confidence": 0.85,
+      "description": "Android 10+ 通用化：第 2 个 halfword（0a4b/0e4b 等字面量池偏移）通配，覆盖更多固件变体；匹配后仍需命中次数==1 才允许自动修补",
+      "source": "generalization of lkpatcher/modlk signatures (this analysis)"
+    },
+    {
+      "id": "arm32-orange-state-pre-a10-generic",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b500007b441b681b68012b",
+      "needle_mask": "ffff0000ffffffffffffffff",
+      "patch": "00207047",
+      "patch_offset": 0,
+      "confidence": 0.85,
+      "description": "Android 10 以前通用化：第 2 个 halfword（0a4b/0e4b 等）通配",
+      "source": "generalization of modlk SIG_PRE_A10 (this analysis)"
+    },
+    {
+      "id": "arm32-red-state-warning",
+      "arch": "arm32-thumb",
+      "category": "red_state",
+      "kind": "signature",
+      "needle": "f0b5002489b0",
+      "patch": "00207047",
+      "patch_offset": 0,
+      "confidence": 0.9,
+      "description": "验证失败（Red State）警告函数入口 push {r4-r7,lr}; movs r4,#0; sub sp,#0x24 → 改 movs r0,#0; bx lr",
+      "source": "lkpatcher patches.json red_state (GPL-3.0, feature facts); docs/spec_lkpatch.md §3.4"
+    },
+    {
+      "id": "arm32-dm-verity-check",
+      "arch": "arm32-thumb",
+      "category": "dm_verity",
+      "kind": "signature",
+      "needle": "30b583b002ab0022",
+      "patch": "00207047",
+      "patch_offset": 0,
+      "confidence": 0.9,
+      "description": "dm-verity/vbmeta 状态检查函数（push {r4,r5,lr}; sub sp,#0xc; add r3,sp,#8; movs r2,#0）→ 强制返回 0",
+      "source": "lkpatcher patches.json dm_verity (GPL-3.0, feature facts)"
+    },
+    {
+      "id": "arm32-dm-verity-variant",
+      "arch": "arm32-thumb",
+      "category": "dm_verity",
+      "kind": "signature",
+      "needle": "022800d0704738b53224e0f7",
+      "patch": "00207047",
+      "patch_offset": 0,
+      "confidence": 0.88,
+      "description": "dm-verity 警告函数变体（cmp r0,#2 / beq / bx lr 形状）",
+      "source": "lkpatcher patches.json dm_verity; docs/spec_lkpatch.md §3.4"
+    },
+    {
+      "id": "arm32-orange-state-a10plus-0a4b-pushpop",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b50a4b7b441b681b68022b",
+      "patch": "08b5002008bd",
+      "patch_offset": 0,
+      "confidence": 0.85,
+      "description": "补丁 A 变体（与 lkpatcher 的 00207047 等价、但保留原 push/pop 帧）：08B5 0020 08BD = push {r3,lr}; movs r0,#0; pop {r3,pc}；仅适用于首指令为 08B5 的分发器",
+      "source": "modlk PATCH_A_LEAD (MIT); Hovatek thread-31664"
+    },
+    {
+      "id": "arm32-orange-state-a10plus-0e4b-pushpop",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b50e4b7b441b681b68022b",
+      "patch": "08b5002008bd",
+      "patch_offset": 0,
+      "confidence": 0.85,
+      "description": "补丁 A 变体（0e4b）",
+      "source": "modlk PATCH_A_LEAD (MIT)"
+    },
+    {
+      "id": "arm32-orange-state-pre-a10-0a4b-pushpop",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b50a4b7b441b681b68012b",
+      "patch": "08b5002008bd",
+      "patch_offset": 0,
+      "confidence": 0.85,
+      "description": "补丁 A 变体（pre-A10, 0a4b）",
+      "source": "modlk PATCH_A_LEAD (MIT); Hovatek thread-31664"
+    },
+    {
+      "id": "arm32-orange-state-pre-a10-0e4b-pushpop",
+      "arch": "arm32-thumb",
+      "category": "orange_state",
+      "kind": "signature",
+      "needle": "08b50e4b7b441b681b68012b",
+      "patch": "08b5002008bd",
+      "patch_offset": 0,
+      "confidence": 0.85,
+      "description": "补丁 A 变体（pre-A10, 0e4b）",
+      "source": "modlk PATCH_A_LEAD (MIT)"
+    },
+    {
+      "id": "a64-orange-red-state-dispatcher",
+      "arch": "aarch64",
+      "category": "orange_state",
+      "kind": "heuristic",
+      "needle": null,
+      "patch": "e0031f2ac0035fd6",
+      "patch_offset": 0,
+      "confidence": 0.95,
+      "description": "AArch64 开机状态警告分发器：函数内 ADRP+ADD 引用 Orange State / Red State / OS Not Being Verified / Dismiss After 5 Seconds / Device Cannot Boot 中至少 2 条，且含 state 比较链（cmp w?,#1/#2/#3）与 5,000,000µs 延时常量（movz w0,#0x4b40; movk w0,#0x4c,lsl#16 = 006889528009a072）→ 函数入口改 mov w0,wzr; ret，同时去掉警告与 5 秒等待；原函数所有路径本来就 return 0",
+      "source": "this analysis: lk_a/lk_b/lk_a.unlocked 验证；tfast lk_image.py 使用同一 AArch64 stub",
+      "params": {
+        "warning_strings_any": [
+          "Orange State",
+          "Red State",
+          "OS Not Being Verified",
+          "Dismiss After 5 Seconds",
+          "Device Cannot Boot"
+        ],
+        "warning_strings_core": ["Orange State", "Red State"],
+        "min_warning_refs": 2,
+        "state_cmp_chain": {"imm_values": [1, 2, 3], "min_matches": 2},
+        "delay_constants": [5000000],
+        "delay_bytes": ["006889528009a072"],
+        "delay_repeat_min": 1,
+        "classification": "dispatcher"
+      }
+    },
+    {
+      "id": "a64-dm-verity-warning",
+      "arch": "aarch64",
+      "category": "dm_verity",
+      "kind": "heuristic",
+      "needle": null,
+      "patch": "e0031f2ac0035fd6",
+      "patch_offset": 0,
+      "confidence": 0.95,
+      "description": "AArch64 dm-verity 警告函数：函数内 ADRP+ADD 引用 dm-verity corruption / Your device is corrupt / It can't be trusted / Device will continue to bootup / tran_dm_fix / Device occur dm vertity corruption 中至少 2 条，且延迟循环使用 100,000µs 常量（movz w0,#0x86a0; movk w0,#1,lsl#16 = 00d490522000a072）重复 >=10 次（本样本 30 次 = 3.0 秒）→ 函数入口改 mov w0,wzr; ret；原函数为 void，调用方忽略返回值",
+      "source": "this analysis: lk_a/lk_b/lk_a.unlocked 验证；tfast lk_image.py 使用同一 AArch64 stub",
+      "params": {
+        "warning_strings_any": [
+          "dm-verity corruption",
+          "Your device is corrupt",
+          "It can't be trusted",
+          "Device will continue to bootup",
+          "tran_dm_fix",
+          "dm vertity corruption",
+          "dm_verity"
+        ],
+        "min_warning_refs": 2,
+        "delay_constants": [100000],
+        "delay_bytes": ["00d490522000a072"],
+        "delay_repeat_min": 10,
+        "exclude_if_any": ["Orange State", "Red State"],
+        "classification": "dm_verity"
+      }
+    }
+  ],
+  "aarch64_heuristic": {
+    "patch": "e0031f2ac0035fd6",
+    "max_backtrack": 1280,
+    "ref_delta_max": 64,
+    "ref_window_instructions": 3,
+    "prologues": [
+      "stp x29, x30, [sp, #-imm]!",
+      "sub sp, sp, #imm",
+      "stp x29, x30, [sp, imm]"
+    ],
+    "warning_strings": {
+      "orange_state": [
+        "Orange State",
+        "OS Not Being Verified"
+      ],
+      "red_state": [
+        "Red State",
+        "Dismiss After 5 Seconds",
+        "Device Cannot Boot"
+      ],
+      "dm_verity": [
+        "dm-verity corruption",
+        "Your device is corrupt",
+        "It can't be trusted",
+        "Device will continue to bootup",
+        "tran_dm_fix",
+        "dm vertity corruption",
+        "dm_verity"
+      ],
+      "boot_state_name_table": [
+        "androidboot.verifiedbootstate"
+      ]
+    },
+    "state_cmp_chain": {
+      "imm_values": [1, 2, 3],
+      "min_matches": 2,
+      "mapping_verified": {
+        "state_1": "red path (yellow/custom key treated as red warning)",
+        "state_2": "orange path",
+        "state_3": "red path",
+        "state_0": "no warning"
+      }
+    },
+    "delay_constants": {
+      "dispatcher_5s": {
+        "value_us": 5000000,
+        "bytes": "006889528009a072",
+        "instructions": ["mov w0, #0x4b40", "movk w0, #0x4c, lsl #16"],
+        "repeat_in_sample": 1
+      },
+      "dm_verity_tick": {
+        "value_us": 100000,
+        "bytes": "00d490522000a072",
+        "instructions": ["mov w0, #0x86a0", "movk w0, #1, lsl #16"],
+        "repeat_in_sample": 30,
+        "total_us": 3000000
+      }
+    },
+    "function_end_hints": {
+      "epilogue_ldp": "ldp x29, x30, [sp], #imm",
+      "epilogue_method": "scan forward from entry; first `ret` after epilogue; or next `stp x29, x30, [sp` prologue"
+    },
+    "patch_safety_checks": [
+      "no branch/cbz/tbz target in [entry+4, entry+8)",
+      "no ADRP+ADD/LDR/literal data reference to [entry, entry+8)",
+      "no absolute pointer word (u32/u64 or 0xffff0000-tagged) equal to entry",
+      "callers of entry: return register ignored or function originally always returns 0 (dispatcher); dm-verity callee is void"
+    ],
+    "guard_do_not_touch": [
+      "androidboot.verifiedbootstate",
+      "androidboot.veritymode",
+      "androidboot.atm",
+      "androidboot."
+    ],
+    "warning_text_clear_keys": [
+      "Orange State",
+      "Red State",
+      "OS Not Being Verified",
+      "Dismiss After 5 Seconds",
+      "Device Cannot Boot",
+      "dm-verity corruption",
+      "Your device is corrupt",
+      "It can't be trusted",
+      "Device will continue to bootup",
+      "Device occur dm vertity corruption",
+      "Your device will boot in 5 seconds",
+      "Your device has been unlocked and can't be trusted",
+      "Your device has failed verification and may not",
+      "work properly"
+    ]
+  }
+}

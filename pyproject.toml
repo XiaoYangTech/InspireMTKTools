@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inspire-mtk-tools"
+version = "3.0.0"
+description = "亿方联发科工具箱 InspireMTKTools — cross-platform MTK boot logo builder + LK bootloader warning patcher"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "InspireMTKTools contributors" }]
+keywords = ["mtk", "mediatek", "android", "logo", "boot", "logo.bin", "logo.img", "lk", "bootloader", "orange-state", "dm-verity", "ttkbootstrap"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Environment :: X11 Applications",
+    "Environment :: Win32 (MS Windows)",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "Pillow>=10.0",
+    "ttkbootstrap>=1.10",
+    "capstone>=5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/XiaoYangTech/InspireMTKTools"
+Repository = "https://github.com/XiaoYangTech/InspireMTKTools"
+Mirror = "https://cnb.cool/InspireWorks/InspireMTKTools"
+Issues = "https://github.com/XiaoYangTech/InspireMTKTools/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pyinstaller>=6"]
+dnd = ["tkinterdnd2>=0.4"]
+
+[project.scripts]
+logobuilder = "logobuilder.ui.main:main"
+logobuilder-cli = "logobuilder.core.cli:main"
+
+[project.gui-scripts]
+logobuilder-gui = "logobuilder.ui.main:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+logobuilder = ["assets/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "gui: GUI/interactive tests that may need a display",
+]
