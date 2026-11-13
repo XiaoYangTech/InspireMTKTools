@@ -183,7 +183,7 @@ dist/LogoBuilder2.exe                    # PyInstaller onefile
 - `tests/test_core`：容器/像素/尺寸/工程/zip/CLI/bootlogo/错误/API 契约，覆盖真实样本与合成夹具（bpp2/bpp4/混合/损坏）。
 - `tests/integration`（QA 独立 oracle）：78/78 绿，含字节回包、zip 结构、GUI 全流程、lk raw、pad、损坏输入。
 - `tests/test_ui`：GUI 冒烟/对话框/DPI/i18n/成像/导出路径。
-- 全量（Lead/QA 最终验收）：**369 passed, 1 skipped, 0 failed**（129.85s；skip = 小屏 compact 模式契约行为；含 core 238、QA integration 78、UI 54）
+- 全量（交付前最终验收）：**447 passed, 1 skipped, 0 failed**（skip = 小屏 compact 模式契约行为；含 core、QA integration、UI/会话/LK 等）
 - 连续多轮运行稳定；GUI 截图、自检、冻结 exe 自检均通过。
 
 ---
@@ -290,12 +290,12 @@ python tools/build_exe.py
 
 | 项 | 命令/方法 | 结果 |
 |---|---|---|
-| 全量测试 | `PYTHONPATH=src python -X utf8 -m pytest tests -q` | **446 passed, 1 skipped, 0 failed**（208s；skip 为小屏 compact 预期） |
+| 全量测试 | `PYTHONPATH=src python -X utf8 -m pytest tests -q` | **447 passed, 1 skipped, 0 failed**（最终 litera 中文界面版；skip 为小屏 compact 预期） |
 | LK 核心单测 | `pytest tests/test_core/test_lkpatch.py -q` | **32 passed**（合成 ARM32/AArch64、真实 lk_a/lk_b、负样本、guard 保护、自定义规则、备份还原、CLI、capstone 缺失回退） |
 | LK 集成 E2E | `pytest tests/integration/test_lkpatch_e2e.py -q` | **32 passed**（真实样本 2 findings、补丁字节、header/guard 不变、原始 sha 不变、verify PASS、备份/还原、fail-safe） |
 | GUI 测试 | `pytest tests/test_ui -q` | **63 passed, 1 skipped**（含 LK 面板 10 用例） |
 | GUI 自检 | `python -X utf8 app.py --self-test` | **15/15 通过，exit 0**（含 LK 扫描→dry-run→应用→校验→还原） |
-| 冻结 exe | `dist/InspireMTKTools.exe --self-test` | **15/15 通过，exit 0**；37,753,715 B，SHA-256 `cf900517fcb34f06c16c232be86c8446207101d520c10291dd8ae750a68239b1`（litera 主题版） |
+| 冻结 exe | `dist/InspireMTKTools.exe --self-test` | **15/15 通过，exit 0**；37,740,792 B，SHA-256 `0f1a55391ae383fdc9fd247769cba07fa31fd4f6e405bcbd54c97ae7c05fd56e`（最终 litera 中文界面版） |
 | 真实 AArch64 样本 | `lk-info/lk-patch/lk-verify/lk-restore`（lk_a/lk_b） | verdict=supported-aarch64、finding 2 个（0x4CC58 dm_verity 0.95、0x4D928 orange_state 0.98），补丁 `e0031f2ac0035fd6` → `mov w0,wzr; ret`，patch_ok=True，原文件 SHA 不变 |
 | ARM32 特征码 | 合成 fixture | 7 条内置规则全部命中，补丁 `00207047`，header/guard 不变 |
 | Logo 回归 | 真实 logo.bin extract→pack | 输出 SHA-256 `c321a9f1…655c` **与原文件字节级一致**（功能未回归） |
