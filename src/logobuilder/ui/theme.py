@@ -1,4 +1,4 @@
-"""主题、配色、字体与高 DPI 适配（单一 litera 浅色主题）。
+"""主题、配色、字体与高 DPI 适配（单一 bootstrap-light 浅色主题）。
 
 职责：
 * :func:`enable_high_dpi` —— 在创建 Tk root **之前**开启 Windows DPI 感知（无需 Windows 时安全跳过）；
@@ -6,10 +6,10 @@
 * :class:`Metrics` —— 所有像素尺寸都经过 ``scale`` 换算，布局只用 grid/pack，不写死像素；
 * :class:`UiFonts` —— 统一的中文字体族（Windows 优先微软雅黑 UI），字号用磅值（pt），
   由 Tk 的 ``tk scaling`` 自动随 DPI 放大；
-* :class:`Palette` / :data:`LITERA_PALETTE` —— Bootswatch **litera** 视觉语言
-  （白底 #ffffff、文字 #343a40、主色 #4582ec、边框 #dee2e6、success #02b875、
-  warning #f0ad4e、danger #d9534f），供 tk 自绘控件（顶栏、卡片、日志、对话框）使用；
-* :class:`ThemeManager` —— 固定使用 ttkbootstrap ``litera`` 主题（无深色模式、无主题切换），
+* :class:`Palette` / :data:`LIGHT_PALETTE` —— ttkbootstrap 内置 **bootstrap-light**
+  视觉语言（白底 #ffffff、文字 #212529、主色 #0a58ca、边框 #d6d6d6、success #146c43、
+  warning #ffc107、danger #b02a37），供 tk 自绘控件（顶栏、卡片、日志、对话框）使用；
+* :class:`ThemeManager` —— 固定使用 ttkbootstrap 内置 ``bootstrap-light`` 主题（无深色模式、无主题切换），
   负责 ttk 样式字体/间距缩放。
 
 只在 GUI 层使用；core 库不 import 本模块。
@@ -35,9 +35,9 @@ except Exception as exc:  # pragma: no cover - 环境缺依赖时才会走到
 
 # ── 设计常量 ────────────────────────────────────────────────
 DESIGN_DPI = 96.0
-#: ttkbootstrap 2.x 把 Bootswatch 主题名作为 legacy 别名保留；litera 即用户要求的样式。
-LIGHT_THEME = "litera"
-_THEME_FALLBACKS = ("litera", "flatly", "bootstrap-light", "cosmo")
+#: ttkbootstrap 2.x 内置的浅色主题（新版目录中的 "Bootstrap 5 默认" 配色），无需 legacy 兼容层。
+LIGHT_THEME = "bootstrap-light"
+_THEME_FALLBACKS = ("bootstrap-light", "cosmo", "flatly", "litera")
 
 _FONT_CANDIDATES = (
     "Microsoft YaHei UI",
@@ -298,42 +298,42 @@ def build_fonts(root: tk.Misc, base: UiFonts | None = None) -> UiFonts:
     )
 
 
-# ── 调色板（litera）────────────────────────────────────────
+# ── 调色板（bootstrap-light）──────────────────────────────
 @dataclass(frozen=True)
 class Palette:
-    """tk 自绘控件用的 litera 颜色集合（单一浅色主题）。"""
+    """tk 自绘控件用的 bootstrap-light 颜色集合（单一浅色主题）。"""
 
-    kind: str = "litera"
+    kind: str = "bootstrap-light"
     window_bg: str = "#ffffff"
     surface: str = "#ffffff"
     surface_alt: str = "#f8f9fa"
     surface_hover: str = "#f1f3f5"
-    border: str = "#dee2e6"
-    text: str = "#343a40"
+    border: str = "#d6d6d6"
+    text: str = "#212529"
     muted: str = "#6c757d"
     header_bg: str = "#ffffff"
     header_bg_alt: str = "#f1f3f5"
     header_sub: str = "#6c757d"
-    accent: str = "#4582ec"
-    accent_soft: str = "#e9f0fd"
-    success: str = "#02b875"
-    warning: str = "#f0ad4e"
-    danger: str = "#d9534f"
+    accent: str = "#0a58ca"
+    accent_soft: str = "#e7f1ff"
+    success: str = "#146c43"
+    warning: str = "#ffc107"
+    danger: str = "#b02a37"
     preview_bg: str = "#f8f9fa"
     checker_a: str = "#ffffff"
     checker_b: str = "#eef1f4"
     log_bg: str = "#ffffff"
-    log_fg: str = "#343a40"
-    log_info: str = "#4582ec"
-    log_warn: str = "#b7791f"
-    log_error: str = "#d9534f"
+    log_fg: str = "#212529"
+    log_info: str = "#0a58ca"
+    log_warn: str = "#8a5a00"
+    log_error: str = "#b02a37"
     badge_bg: str = "#f1f3f5"
     badge_fg: str = "#495057"
     scroll_track: str = "#f1f3f5"
     scroll_thumb: str = "#ced4da"
-    shadow: str = "#dee2e6"
-    tag_ok_bg: str = "#e6f9f2"
-    tag_ok_fg: str = "#087f5b"
+    shadow: str = "#d6d6d6"
+    tag_ok_bg: str = "#e6f4ec"
+    tag_ok_fg: str = "#146c43"
     tag_mod_bg: str = "#fff4e3"
     tag_mod_fg: str = "#a56200"
     tag_unknown_bg: str = "#fdecec"
@@ -342,23 +342,23 @@ class Palette:
     tag_binary_fg: str = "#495057"
 
 
-LITERA_PALETTE = Palette()
+LIGHT_PALETTE = Palette()
 
 
-# ── 主题管理（固定 litera）─────────────────────────────────
+# ── 主题管理（固定 bootstrap-light）────────────────────────
 class ThemeManager:
-    """管理 ttkbootstrap ``litera`` 主题 + litera 调色板 + ttk 字体/间距缩放。"""
+    """管理 ttkbootstrap ``bootstrap-light`` 主题 + 对应调色板 + ttk 字体/间距缩放。"""
 
     def __init__(self, root: tb.Window, style: Style | None = None) -> None:
         self.root = root
         self.style: Style = style or getattr(root, "style", None) or Style(root)
-        self.palette = LITERA_PALETTE
+        self.palette = LIGHT_PALETTE
         self.fonts: UiFonts = build_fonts(root)
         self.metrics = Metrics(scale=detect_scale(root)[0])
         self._apply_theme_name()
         self._configure_styles()
 
-    # ── 主题（固定 litera，无切换）──────────────────────
+    # ── 主题（固定浅色，无切换）──────────────────────
     def _theme_names(self) -> set[str]:
         try:
             return set(self.style.theme_names())
@@ -366,15 +366,14 @@ class ThemeManager:
             return set()
 
     def _apply_theme_name(self) -> None:
-        """应用 litera；不同 ttkbootstrap 版本下逐级回退（仍是浅色主题）。"""
-        names = self._theme_names() | {"litera"}
+        """应用 bootstrap-light；不同 ttkbootstrap 版本下逐级回退（仍是浅色主题）。"""
+        names = self._theme_names() | set(_THEME_FALLBACKS)
         for candidate in _THEME_FALLBACKS:
             if candidate not in names:
                 continue
             try:
                 with warnings.catch_warnings():
-                    # ttkbootstrap 2.x 对 Bootswatch legacy 主题名会发 DeprecationWarning，
-                    # 这是产品明确要求的 litera 样式，这里安静使用。
+                    # 回退到 legacy 主题名时（旧版 ttkbootstrap）可能发 DeprecationWarning，这里安静使用。
                     warnings.simplefilter("ignore", DeprecationWarning)
                     self.style.theme_use(candidate)
                 return

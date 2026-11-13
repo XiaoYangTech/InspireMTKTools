@@ -212,7 +212,7 @@ def rounded_rect(
 
 # ── 顶栏 ───────────────────────────────────────────────────
 class HeaderBar(tk.Frame):
-    """应用顶栏（litera 风格）：白底 + 底部 1px 分隔线 + 品牌区 + 设置/帮助入口。"""
+    """应用顶栏（bootstrap-light 风格）：白底 + 底部 1px 分隔线 + 品牌区 + 设置/帮助入口。"""
 
     def __init__(self, master: tk.Misc, app: Any) -> None:
         palette: Palette = app.palette
@@ -225,7 +225,7 @@ class HeaderBar(tk.Frame):
         self.fonts = fonts
         self._compact = False
 
-        # 底部 1px 分隔线（litera 顶栏用细线区分工具栏，而不是深色块）
+        # 底部 1px 分隔线（bootstrap-light 顶栏用细线区分工具栏，而不是深色块）
         self.bottom_line = tk.Frame(self, bg=palette.border, height=max(1, metrics.px(1)))
         self.bottom_line.pack(side="bottom", fill="x")
 
@@ -315,7 +315,7 @@ class HeaderBar(tk.Frame):
         palette = self.palette
         canvas = self.logo_canvas
         canvas.delete("all")
-        # litera primary 蓝底白字圆角块
+        # bootstrap-light primary 蓝底白字圆角块
         rounded_rect(canvas, 0, 0, size, size, size * 0.26, fill=palette.accent, outline="")
         canvas.create_text(
             size / 2,

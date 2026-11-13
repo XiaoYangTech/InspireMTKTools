@@ -35,6 +35,7 @@ analysis/format/scratch/
 analysis/format/*.bin
 analysis/format/hdrprobe_dir/
 analysis/ui_screenshots/
+analysis/user_logo/
 analysis/qa/artifacts/
 
 # ── 第三方逆向工具二进制（体积大，可重新下载）────────────

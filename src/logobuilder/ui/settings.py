@@ -46,7 +46,7 @@ def settings_path() -> Path:
 class UiSettings:
     """可持久化的界面设置（全部有安全默认值）。
 
-    产品为中文单语、单一 litera 浅色主题，因此不再持久化语言/主题字段；
+    产品为中文单语、单一 bootstrap-light 浅色主题，因此不再持久化语言/主题字段；
     旧配置文件里的 ``language`` / ``theme`` 会被读取时自动忽略。
     """
 

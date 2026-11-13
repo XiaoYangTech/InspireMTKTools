@@ -75,11 +75,11 @@ class LogoBuilderApp:
         self.config_dir = config_dir()
         self.config_path = Path(config_path) if config_path is not None else self.config_dir / "ui_settings.json"
         self.settings = settings if settings is not None else UiSettings.load(self.config_path)
-        # 中文单语界面 + 单一 litera 浅色主题（无语言/主题切换）
+        # 中文单语界面 + 单一 bootstrap-light 浅色主题（无语言/主题切换）
         self.tr = Translator()
         self.toolkit_version = TOOLKIT_VERSION
 
-        # 主题固定 litera / 缩放 / 字体（DPI 感知已在创建 root 之前开启）
+        # 主题固定 bootstrap-light / 缩放 / 字体（DPI 感知已在创建 root 之前开启）
         self.theme = ThemeManager(root, style=getattr(root, "style", None))
         self.theme.refresh_from_root()
         self._sync_theme_attrs()

@@ -59,10 +59,10 @@ def test_logo_size_from_key():
 # ----------------------------------------------------------------------
 # SizeDB 基础
 # ----------------------------------------------------------------------
-def test_default_db_loads_49_builtin():
+def test_default_db_loads_50_builtin():
     db = SizeDB.default()
     builtin = builtin_sizes()
-    assert len(builtin) == 49
+    assert len(builtin) == 50
     assert len(db) >= len(builtin)
     assert LogoSize(540, 960, 4) in db
     assert LogoSize(38, 54, 4) in db

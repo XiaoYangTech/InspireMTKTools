@@ -96,6 +96,22 @@ def is_mtk_logo(data: bytes | bytearray | memoryview) -> bool:
     return _U32.unpack_from(blob, 0)[0] == MAGIC
 
 
+
+def _opaque_alpha_ratio(data: bytes) -> float:
+    """BGRA8888 数据中 alpha 字节为 0xFF 的比例。
+
+    RGB565 图像每 4 字节中第 4 字节是下一个像素的高字节（随机分布），该比例通常
+    接近 1/256；而不透明的 BGRA8888 图像该比例接近 1.0，可用于区分"同为
+    ``w*h*2`` 与 ``w*h*4`` 字节数的两种布局"（例如 320x480x2 与 480x160x4）。
+    """
+    if len(data) < 4:
+        return 0.0
+    alpha = data[3::4]
+    if not alpha:
+        return 0.0
+    return sum(1 for value in alpha if value == 0xFF) / len(alpha)
+
+
 def _looks_like_block_table(blob: bytes) -> bool:
     """轻量结构探测：payload 是否像一个自洽的块表（不解压数据）。"""
     available = len(blob) - HEADER_SIZE
@@ -724,6 +740,29 @@ class LogoContainer:
                 confident = [c for c in candidates if c.score >= 0.9]
                 if len(confident) == 1:
                     size = confident[0].size
+                elif db.exact(len(decompressed)):
+                    # 同一解压长度在尺寸表中同时登记了 RGB565 与 BGRA8888 两种布局
+                    # （典型：320x480x2 与 480x160x4 都是 307200 字节）。按 alpha 字节
+                    # 判定：几乎全 0xFF 视为不透明 BGRA，否则按 RGB565。
+                    exact_sizes = set(db.exact(len(decompressed)))
+                    if len(decompressed) % 4 == 0 and _opaque_alpha_ratio(decompressed) >= 0.99:
+                        # 优先采用尺寸表中的精确 BGRA 条目（如 480x160x4），
+                        # 避免被"由长度反解"的 160x480x4 等旋转候选抢占。
+                        bgra_exact = [
+                            c for c in candidates
+                            if c.size.color_depth == 4 and c.size in exact_sizes
+                        ]
+                        bgra = bgra_exact or [c for c in candidates if c.size.color_depth == 4]
+                        if bgra:
+                            size = max(bgra, key=lambda c: c.score).size
+                    else:
+                        rgb565_exact = [
+                            c for c in candidates
+                            if c.size.color_depth == 2 and c.size in exact_sizes
+                        ]
+                        rgb565 = rgb565_exact or [c for c in candidates if c.size.color_depth == 2]
+                        if rgb565:
+                            size = max(rgb565, key=lambda c: c.score).size
 
         if size is not None:
             block = ImageBlock(index=index, size=size, pixels=decompressed, raw_compressed=raw)

@@ -212,7 +212,7 @@ def run_self_test(app: Any) -> int:
             _check("InspireMTKTools" in app.root.title(), "窗口标题未更名")
             tabs = [app.notebook.tab(i, "text") for i in range(app.notebook.index("end"))]
             _check(len(tabs) == 2, f"工作区 Tab 数量异常：{tabs}")
-            # 中文单语 + 单一 litera 浅色主题：不存在语言/深色入口
+            # 中文单语 + 单一 bootstrap-light 浅色主题：不存在语言/深色入口
             _check(app.tr.language == "zh_CN", "界面语言不是中文")
             _check(not hasattr(app, "toggle_theme"), "不应存在深色模式切换")
             _check(not hasattr(app, "toggle_language"), "不应存在语言切换")
@@ -222,13 +222,13 @@ def run_self_test(app: Any) -> int:
                 not hasattr(app.settings, "theme") and not hasattr(app.settings, "language"),
                 "设置不应含主题/语言字段",
             )
-            _check(app.palette.kind == "litera", f"调色板不是 litera：{app.palette.kind}")
-            _check(app.palette.accent == "#4582ec", f"litera 主色不符：{app.palette.accent}")
+            _check(app.palette.kind == "bootstrap-light", f"调色板不是 bootstrap-light：{app.palette.kind}")
+            _check(app.palette.accent == "#0a58ca", f"bootstrap-light 主色不符：{app.palette.accent}")
             from logobuilder.ui import theme as theme_module
 
             _check(not hasattr(theme_module, "DARK_PALETTE"), "不应保留深色调色板")
             _print_step(
-                "界面组件检查（顶栏 / 工具栏 / Logo+LK 两工作区 / 状态栏 / 日志 / 品牌更名 / 单一 litera 中文界面）"
+                "界面组件检查（顶栏 / 工具栏 / Logo+LK 两工作区 / 状态栏 / 日志 / 品牌更名 / 单一 bootstrap-light 中文界面）"
             )
             steps += 1
 

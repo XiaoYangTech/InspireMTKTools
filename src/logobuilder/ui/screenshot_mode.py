@@ -1,6 +1,6 @@
 """``python app.py --screenshot out.png`` 的实现。
 
-生成演示数据并截取（共 12 张，全部 litera 浅色）：
+生成演示数据并截取（共 12 张，全部 bootstrap-light 浅色）：
 * 设置 / 分辨率 / 替换图片 / 错误 / 帮助对话框
 * 150% 缩放主窗口
 * LK 修补面板、补丁预览/校验/刷写说明对话框
@@ -145,7 +145,7 @@ def run_screenshot(app: Any, out_path: str | Path, repo_root: str | Path | None 
             width = metrics.window_default_width
             height = metrics.window_default_height
 
-            # 1) 设置对话框（单一 litera 主题，无深色模式）
+            # 1) 设置对话框（单一 bootstrap-light 主题，无深色模式）
             settings_dialog = SettingsDialog(app)
             _prepare_dialog(app, settings_dialog, metrics.px(620), metrics.px(432))
             _capture(app, settings_dialog, shots_dir / "settings_dialog.png", label="设置对话框", results=results)

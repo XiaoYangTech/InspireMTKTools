@@ -496,3 +496,45 @@ def test_missing_file_raises_export_error(tmp_path):
 def test_header_must_be_512():
     with pytest.raises(CorruptContainer):
         LogoContainer(header=b"short", tag="LOGO", blocks=[])
+
+
+# ----------------------------------------------------------------------
+# 同名长度的 RGB565 / 不透明 BGRA8888 歧义消解（如 320x480x2 vs 480x160x4）
+# ----------------------------------------------------------------------
+def _pseudo_bytes(length: int, *, opaque_alpha: bool) -> bytes:
+    data = bytearray((i * 131 + 17) & 0xFF for i in range(length))
+    if opaque_alpha:
+        data[3::4] = bytes([0xFF]) * (length // 4)
+    return bytes(data)
+
+
+def test_ambiguous_length_opaque_bgra_detected_as_480x160x4():
+    """307200 字节同时对应 320x480x2 与 480x160x4；alpha 全 0xFF 应判为 BGRA。"""
+    from helpers import make_container_bytes
+
+    blob = make_container_bytes([_pseudo_bytes(320 * 480 * 2, opaque_alpha=True)])
+    container = LogoContainer.parse(blob)
+    block = container.blocks[0]
+    assert isinstance(block, ImageBlock)
+    assert block.size == LogoSize(480, 160, 4)
+
+
+def test_ambiguous_length_rgb565_detected_as_320x480x2():
+    """非不透明数据（RGB565 常见情况）应保持 320x480x2。"""
+    from helpers import make_container_bytes
+
+    blob = make_container_bytes([_pseudo_bytes(320 * 480 * 2, opaque_alpha=False)])
+    container = LogoContainer.parse(blob)
+    block = container.blocks[0]
+    assert isinstance(block, ImageBlock)
+    assert block.size == LogoSize(320, 480, 2)
+
+
+def test_unknown_length_stays_pending_even_if_alpha_opaque():
+    """尺寸表未登记的长度不自动猜测布局，保持待定以便用户确认。"""
+    from helpers import make_container_bytes
+
+    blob = make_container_bytes([_pseudo_bytes(16 * 23 * 4, opaque_alpha=True)])
+    container = LogoContainer.parse(blob)
+    assert container.pending_image_blocks == [0]
+    assert isinstance(container.blocks[0], BinaryBlock)

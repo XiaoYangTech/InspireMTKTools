@@ -40,23 +40,23 @@ def test_toolbar_buttons(app):
     assert str(toolbar.button_by_action("open_image_dialog").cget("state")) == "normal"
 
 
-def test_single_litera_theme(app):
-    """只保留 litera 浅色主题：调色板固定、无深色切换入口。"""
+def test_single_light_theme(app):
+    """只保留 bootstrap-light 浅色主题：调色板固定、无深色切换入口。"""
     from logobuilder.ui import theme as theme_module
 
-    assert app.palette.kind == "litera"
-    assert app.palette.accent == "#4582ec"
+    assert app.palette.kind == "bootstrap-light"
+    assert app.palette.accent == "#0a58ca"
     assert app.palette.window_bg == "#ffffff"
     assert app.palette.surface == "#ffffff"
-    assert app.palette.text == "#343a40"
-    assert app.palette.border == "#dee2e6"
+    assert app.palette.text == "#212529"
+    assert app.palette.border == "#d6d6d6"
     # 无深色入口/深色实现
     assert not hasattr(app, "toggle_theme")
     assert not hasattr(app.header, "theme_link")
     assert not hasattr(theme_module, "DARK_PALETTE")
     assert not hasattr(app.settings, "theme")
-    # ttkbootstrap 当前主题名是 litera
-    assert app.theme.style.theme_use() == "litera"
+    # ttkbootstrap 当前主题名是 bootstrap-light
+    assert app.theme.style.theme_use() == "bootstrap-light"
 
 
 def test_no_language_entry(app):

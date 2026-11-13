@@ -171,7 +171,7 @@ def test_export_img_dialog(app, tmp_path):
 def test_settings_dialog_fields(app):
     dialog = SettingsDialog(app)
     app.root.update_idletasks()
-    # 中文单语 + 单一 litera 主题：设置中不应再有主题/语言项
+    # 中文单语 + 单一 bootstrap-light 主题：设置中不应再有主题/语言项
     assert not hasattr(dialog, "theme_var")
     assert not hasattr(dialog, "language_var")
     assert dialog.fit_var.get() == app.settings.default_fit

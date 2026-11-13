@@ -11,7 +11,7 @@
 
 - **完全还原了原软件的私有格式**：`logo.bin`/`logo.img` = 512B MTK 头 + `{count,total,offsets[]}` 块表 + 连续 zlib 流；像素格式 RGB565 / BGRA8888；分辨率靠外部 `sizes.txt`（key = W×H×bpp）。**逆向结论用两份独立实现互相验证**（`docs/spec_original.md` 与 `analysis/format/spec_bin.md`），真实样本 51 块全部解出，**未修改块回包字节级一致**（SHA-256 相同）。
 - **破解了原版保护**：识别出 Crypto Obfuscator（LogicNP）保护，解密出 137 条字符串（文件名、`.project` 行格式、CLI 命令、错误文案全部明文），还原 9097 行 C#，并定位了原版 **10 类已知缺陷 + 13 条新缺陷**（含"启动即崩"的 N1）。
-- **重制版已可交付**：`python app.py` 跨平台 GUI（全中文单语、统一 ttkbootstrap **litera** 浅色主题、HiDPI 100–200%）、`python -m logobuilder.core.cli` 命令行、PyInstaller 单文件 `dist/InspireMTKTools.exe`；实测解析/回包/GUI 全流程/DPI/冻结 exe 自检全部通过。
+- **重制版已可交付**：`python app.py` 跨平台 GUI（全中文单语、统一 ttkbootstrap **bootstrap-light** 浅色主题、HiDPI 100–200%）、`python -m logobuilder.core.cli` 命令行、PyInstaller 单文件 `dist/InspireMTKTools.exe`；实测解析/回包/GUI 全流程/DPI/冻结 exe 自检全部通过。
 - **修复了用户抱怨的全部问题**：分辨率窗口不出现（B1 根因：异常被吞 + 永久写 ignored.txt）、目录选择（B2 自绘 Win32 对话框）、软件内换图（B3）、只认 bin（B4）、只能出卡刷包（B5 增加 logo.img / pad 导出）、不能自动识别分辨率（B6 候选列表 + 置信度 + 相邻块投票）。
 - **开源代替品结论**：2026 年仍**没有**带 GUI 的中文 LogoBuilder 替代品；最值得参考的是 YAMLP（MIT，2026-08，现代 logo.img）、mtklogo（Rust，MIT，旧格式 CLI）。我们的差异点 = 中文 GUI + 自动探测 + 新旧格式 + 字节级回归测试语料。
 
@@ -183,7 +183,7 @@ dist/LogoBuilder2.exe                    # PyInstaller onefile
 - `tests/test_core`：容器/像素/尺寸/工程/zip/CLI/bootlogo/错误/API 契约，覆盖真实样本与合成夹具（bpp2/bpp4/混合/损坏）。
 - `tests/integration`（QA 独立 oracle）：78/78 绿，含字节回包、zip 结构、GUI 全流程、lk raw、pad、损坏输入。
 - `tests/test_ui`：GUI 冒烟/对话框/DPI/i18n/成像/导出路径。
-- 全量（交付前最终验收）：**447 passed, 1 skipped, 0 failed**（skip = 小屏 compact 模式契约行为；含 core、QA integration、UI/会话/LK 等）
+- 全量（交付前最终验收）：**450 passed, 1 skipped, 0 failed**（skip = 小屏 compact 模式契约行为；含 core、QA integration、UI/会话/LK 等）
 - 连续多轮运行稳定；GUI 截图、自检、冻结 exe 自检均通过。
 
 ---
@@ -279,23 +279,29 @@ python tools/build_exe.py
 - 安全：自动备份、补丁前后反汇编、差异区间校验、**禁止改动 `androidboot.*`/`verifiedbootstate`/`veritymode`/`atm`**（前后计数比较，变化则拒绝）、fail-safe（无候选不写文件）、A/B 双槽提示。
 - 品牌：对外统一「亿方联发科工具箱 / InspireMTKTools v3.0.0」；内部 Python 包名保持 `logobuilder` 以兼容既有 API/测试；exe 更名为 `dist/InspireMTKTools.exe`。
 
-## 12.1 界面主题（v3.0.0 主题微调：浅色 litera）
+## 12.1 界面主题（v3.0.0：单一 bootstrap-light 浅色）
 
-- 界面全面改为 ttkbootstrap 的 Bootswatch **litera**（primary `#4582ec`、bg `#ffffff`、fg `#343a40`、border `#dee2e6`），**单一浅色主题**（移除深色模式与 Ctrl+T）；顶栏/卡片/表格/对话框/日志等自绘区域全部按 litera 重绘。
+- 界面全面改为 ttkbootstrap 新版内置的 **bootstrap-light**（primary `#0a58ca`、bg `#ffffff`、fg `#212529`、border `#d6d6d6`），**单一浅色主题**（移除深色模式与 Ctrl+T）；顶栏/卡片/表格/对话框/日志等自绘区域全部按 bootstrap-light 重绘。
 - 界面语言改为**仅中文**（移除 English 切换、语言设置与英文文案；品牌名 InspireMTKTools 保留）。
-- ttkbootstrap 2.x 把 litera 等 1.x 主题收进 legacy 兼容层：`theme.py` 在 root 创建前调用 `install_legacy_themes()`（延迟注册），并在 `ThemeManager` 内兜底立即注册 + 名称回退（`litera → bootstrap-light → cosmo → flatly`），旧版 ttkbootstrap（自带 litera）同样可用。
-- 自定义 tk 调色板（顶栏/卡片/块列表/日志/标签）对齐 litera 色值；截图 `analysis/ui_screenshots/main_window.png`、`lk_patch_scan.png` 等 12 张已重生成。
+- 不再依赖 legacy 主题名：`bootstrap-light` 是 ttkbootstrap 2.x 新版内置主题；`theme.py` 仍保留名称回退（`bootstrap-light → cosmo → flatly → litera`）以兼容新旧版本。
+- 自定义 tk 调色板（顶栏/卡片/块列表/日志/标签）对齐 bootstrap-light 色值；截图 `analysis/ui_screenshots/main_window.png`、`lk_patch_scan.png` 等 12 张已重生成。
+
+## 12.2 新增布局兼容（真实用户样本）
+
+- 用户提供 8MiB `logo.img`（`SHA-256 055aa581…1cf2`）：MTK LOGO 新变体，40 块 = 18×`480x160x4` 动画帧 + 数字/图标小图。
+- 同长度歧义（307200 字节 = 320x480x2 = 480x160x4）：新增 alpha 判别（不透明 BGRA 优先），并新增 `480x160x4` 尺寸表条目；
+  未登记长度保持"待定"交给用户确认，避免误判；`pad_to_size=8388608` 重包与原文件逐字节一致。
 
 ## 13. 验证记录（第二轮，Lead 最终验收实测）
 
 | 项 | 命令/方法 | 结果 |
 |---|---|---|
-| 全量测试 | `PYTHONPATH=src python -X utf8 -m pytest tests -q` | **447 passed, 1 skipped, 0 failed**（最终 litera 中文界面版；skip 为小屏 compact 预期） |
+| 全量测试 | `PYTHONPATH=src python -X utf8 -m pytest tests -q` | **450 passed, 1 skipped, 0 failed**（bootstrap-light 中文界面版；skip 为小屏 compact 预期） |
 | LK 核心单测 | `pytest tests/test_core/test_lkpatch.py -q` | **32 passed**（合成 ARM32/AArch64、真实 lk_a/lk_b、负样本、guard 保护、自定义规则、备份还原、CLI、capstone 缺失回退） |
 | LK 集成 E2E | `pytest tests/integration/test_lkpatch_e2e.py -q` | **32 passed**（真实样本 2 findings、补丁字节、header/guard 不变、原始 sha 不变、verify PASS、备份/还原、fail-safe） |
 | GUI 测试 | `pytest tests/test_ui -q` | **63 passed, 1 skipped**（含 LK 面板 10 用例） |
 | GUI 自检 | `python -X utf8 app.py --self-test` | **15/15 通过，exit 0**（含 LK 扫描→dry-run→应用→校验→还原） |
-| 冻结 exe | `dist/InspireMTKTools.exe --self-test` | **15/15 通过，exit 0**；37,740,792 B，SHA-256 `0f1a55391ae383fdc9fd247769cba07fa31fd4f6e405bcbd54c97ae7c05fd56e`（最终 litera 中文界面版） |
+| 冻结 exe | `dist/InspireMTKTools.exe --self-test` | **15/15 通过，exit 0**；37,742,200 B，SHA-256 `19139ae1be0ee1543f862ed2dda19986a044d538bee9f584eb2a27bd2e9f4a48`（bootstrap-light 中文界面版） |
 | 真实 AArch64 样本 | `lk-info/lk-patch/lk-verify/lk-restore`（lk_a/lk_b） | verdict=supported-aarch64、finding 2 个（0x4CC58 dm_verity 0.95、0x4D928 orange_state 0.98），补丁 `e0031f2ac0035fd6` → `mov w0,wzr; ret`，patch_ok=True，原文件 SHA 不变 |
 | ARM32 特征码 | 合成 fixture | 7 条内置规则全部命中，补丁 `00207047`，header/guard 不变 |
 | Logo 回归 | 真实 logo.bin extract→pack | 输出 SHA-256 `c321a9f1…655c` **与原文件字节级一致**（功能未回归） |

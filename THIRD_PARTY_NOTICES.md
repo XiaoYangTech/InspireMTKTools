@@ -7,7 +7,7 @@
 
 | 组件 | 许可证 | 用途 |
 |---|---|---|
-| [ttkbootstrap](https://github.com/israel-dryer/ttkbootstrap) | MIT | GUI 主题/控件（浅色 litera 主题经其 legacy 兼容层注册） |
+| [ttkbootstrap](https://github.com/israel-dryer/ttkbootstrap) | MIT | GUI 主题/控件（浅色 bootstrap-light 主题为新版内置主题） |
 | [Pillow](https://python-pillow.org/) | MIT-CMU (HPND) | 图像编解码/预览/截图 |
 | [capstone](https://www.capstone-engine.org/) | BSD-3-Clause | LK（AArch64）反汇编与补丁点识别（可选：缺失时 ARM32 功能仍可用） |
 | Python / tkinter / Tcl-Tk | PSF / Tcl-Tk license | 运行时与 GUI 基础库 |

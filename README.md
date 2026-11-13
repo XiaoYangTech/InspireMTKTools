@@ -4,7 +4,7 @@
 > **开机 Logo 编辑器** + **LK 引导程序修补器**（去 orange-state/red-state 开机警告与 5 秒等待、去 dm-verity 警告与等待）。
 >
 > 前身是 2011–2015 年的闭源软件 `LogoBuilder v1.6`——本项目用 **REA** 逆向其私有格式后用 **Python 3.10+ / ttkbootstrap / Pillow / capstone** 完整重写，
-> 修复原版已知缺陷（均有代码级证据），并新增现代功能。界面为 **ttkbootstrap `litera` 主题**的全中文单语界面；GUI 与 CLI 共用同一核心库，功能可脚本化、可测试。
+> 修复原版已知缺陷（均有代码级证据），并新增现代功能。界面为 **ttkbootstrap `bootstrap-light` 主题**的全中文单语界面；GUI 与 CLI 共用同一核心库，功能可脚本化、可测试。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
@@ -40,6 +40,7 @@ git clone https://cnb.cool/InspireWorks/InspireMTKTools.git
 - 重新打包 `logo.img`（可 0x00/0xFF 填充到分区大小，fastboot/SP Flash Tool 直刷）、`logo.bin`、CWM/TWRP 卡刷包 `update.zip`、第二屏 `boot_logo`
 - **未修改块逐字节保留**，真实样本回包 **字节级一致**（SHA-256 相同）
 - 未知尺寸自动识别：内置尺寸表 + 解压长度反查 + 相邻块投票 + 宽高比启发式 → 候选列表 + 置信度 + 实时预览
+- 同字节长度布局判别：`320x480x2`（RGB565）与 `480x160x4`（不透明 BGRA8888）按 alpha 字节自动区分（`sizes.txt` 已含 480x160x4）
 
 ### B. LK 引导程序修补
 
@@ -55,7 +56,7 @@ git clone https://cnb.cool/InspireWorks/InspireMTKTools.git
 ### C. 通用能力
 
 - 跨平台 + 高分屏自适应（Windows DPI awareness、100%–200% 缩放）
-- 全中文界面，统一 **ttkbootstrap litera**（Bootswatch）浅色主题
+- 全中文界面，统一 **ttkbootstrap bootstrap-light**（新版内置「Bootstrap 5 默认」）浅色主题
 - 后台线程 + 进度 + 取消；可读中文错误 + 可复制日志
 - 原版工程兼容（`header` + `.project` 导入/导出）
 - 全部核心逻辑有单元/集成/GUI 测试（440+ 项），Windows 单文件 exe

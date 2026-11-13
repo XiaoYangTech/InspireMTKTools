@@ -227,7 +227,7 @@ def test_sizes_command(capsys):
     assert main(["sizes"]) == 0
     captured = capsys.readouterr()
     assert "540x960x4" in captured.out
-    assert "内置 49 项" in captured.out
+    assert "内置 50 项" in captured.out
 
 
 def test_sizes_json(capsys):
@@ -235,7 +235,7 @@ def test_sizes_json(capsys):
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert "540x960x4" in payload
-    assert len(payload) >= 49
+    assert len(payload) >= 50
 
 
 def test_help_returns_zero(capsys):

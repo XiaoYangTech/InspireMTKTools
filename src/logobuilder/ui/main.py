@@ -2,7 +2,7 @@
 
 负责：
 1. 在创建 Tk root **之前** 开启 Windows DPI 感知；
-2. 创建 ttkbootstrap 根窗口（固定 litera 浅色主题、中文单语界面）；
+2. 创建 ttkbootstrap 根窗口（固定 bootstrap-light 浅色主题、中文单语界面）；
 3. 按参数进入自检 / 截图 / 正常 GUI 模式；
 4. 对无显示环境给出可读错误（退出码 2）。
 """
@@ -33,7 +33,6 @@ def _create_root() -> Any:
 
     try:
         with warnings.catch_warnings():
-            # litera 是产品明确要求的 Bootswatch 样式（ttkbootstrap 2.x 中为 legacy 别名）
             warnings.simplefilter("ignore", DeprecationWarning)
             return tb.Window(themename=LIGHT_THEME)
     except Exception:

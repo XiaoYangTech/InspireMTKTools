@@ -42,12 +42,9 @@ def tk_root():
     import ttkbootstrap as tb
 
     try:
-        with warnings.catch_warnings():
-            # litera 是产品要求的 Bootswatch 样式（ttkbootstrap 2.x 中为 legacy 别名）
-            warnings.simplefilter("ignore", DeprecationWarning)
-            root = tb.Window(themename="litera")
-    except Exception:  # 老版本 ttkbootstrap 没有 litera 别名
         root = tb.Window(themename="bootstrap-light")
+    except Exception:  # 极老版本 ttkbootstrap 没有 bootstrap-light 时的兜底
+        root = tb.Window(themename="cosmo")
     root.maxsize(5000, 3600)
     root.geometry("1240x820+0+0")
     root.update()
