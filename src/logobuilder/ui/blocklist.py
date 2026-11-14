@@ -45,7 +45,7 @@ class BlockCard(tk.Frame):
         self._thumb_photo: Any = None
         self._paint_widgets: list[tk.Widget] = []
         m = self.metrics
-        self.configure(height=m.card_height)
+        self.configure(height=m.px(122 if view.is_multi_frame else 78))
         self.grid_propagate(False)
         self.grid_columnconfigure(2, weight=1)
 
@@ -75,7 +75,13 @@ class BlockCard(tk.Frame):
             anchor="w",
             justify="left",
         )
-        self.title_label.grid(row=0, column=2, sticky="w", pady=(m.px(12), 0))
+        self.title_label.grid(row=0, column=2, sticky="w", pady=(m.px(10), 0))
+        # 双帧块的尺寸文字较长：允许按卡片宽度换行（高度在 update_from_view 中调整）
+        self.title_label.configure(justify="left")
+        try:
+            self.bind("<Configure>", self._on_card_configure, add="+")
+        except Exception:
+            pass
 
         self.kind_label = tk.Label(
             self,
@@ -128,7 +134,16 @@ class BlockCard(tk.Frame):
         tr = self.app.tr
         view = self.view
         if view.size is not None:
-            return f"#{view.index + 1}   {size_to_text(view.size)}"
+            size_text = size_to_text(view.size)
+            if view.is_multi_frame:
+                size_text = tr.t(
+                    "blocks.size_with_frames",
+                    size=size_text,
+                    count=view.frame_count,
+                    frame_width=view.frame_width,
+                    frame_height=view.frame_height,
+                )
+            return f"#{view.index + 1}   {size_text}"
         return f"#{view.index + 1}"
 
     def _kind_text(self) -> str:
@@ -171,8 +186,26 @@ class BlockCard(tk.Frame):
         bg, fg = mapping.get(status, (palette.badge_bg, palette.badge_fg))
         self.status_label.configure(bg=bg, fg=fg)
 
+    def _on_card_configure(self, event: Any = None) -> None:
+        try:
+            width = event.width if event is not None else self.winfo_width()
+        except Exception:
+            width = self.winfo_width()
+        wrap = max(self.metrics.px(120), int(width) - self.metrics.px(112))
+        try:
+            self.title_label.configure(wraplength=wrap)
+        except Exception:
+            pass
+
     def update_from_view(self) -> None:
         self.title_label.configure(text=self._title())
+        # 双帧块标题需要两行，卡片高度略增；单帧块保持原高度
+        height = self.metrics.px(122 if self.view.is_multi_frame else 78)
+        try:
+            self.configure(height=height)
+        except Exception:
+            pass
+        self._on_card_configure()
         self.kind_label.configure(text=self._kind_text())
         self.size_label.configure(text=self._size_text())
         self.status_label.configure(text=self._status_text())
@@ -417,7 +450,11 @@ class BlockListPanel(tk.Frame):
                     str(view.index + 1),
                     f"#{view.index + 1}",
                     view.kind,
-                    size_to_text(view.size) if view.size is not None else "",
+                    (
+                        self._title()
+                        if view.is_multi_frame
+                        else (size_to_text(view.size) if view.size is not None else "")
+                    ),
                     str(view.decompressed_len or ""),
                     view.status,
                 ]

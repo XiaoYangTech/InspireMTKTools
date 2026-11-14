@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import copy
 import threading
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -164,6 +165,7 @@ class BlockView:
         "compressed_len",
         "modified",
         "note",
+        "frame_count",
     )
 
     def __init__(
@@ -176,6 +178,7 @@ class BlockView:
         compressed_len: int | None = None,
         modified: bool = False,
         note: str | None = None,
+        frame_count: int = 1,
     ) -> None:
         self.index = index
         self.kind = kind  # "image" | "binary" | "unknown"
@@ -184,6 +187,14 @@ class BlockView:
         self.compressed_len = compressed_len
         self.modified = modified
         self.note = note
+        #: 块内左右并排的帧数（1=单帧；2=左右双帧，如 480x160 = 2 x 240x160）
+        count = int(frame_count) if not isinstance(frame_count, bool) else 1
+        if size is not None and getattr(size, "width", 0):
+            if count < 1:
+                count = 1
+            if getattr(size, "width", 0) % count:
+                count = 1
+        self.frame_count = max(1, count)
 
     @property
     def is_image(self) -> bool:
@@ -192,6 +203,35 @@ class BlockView:
     @property
     def is_binary(self) -> bool:
         return self.kind == "binary"
+
+    @property
+    def is_multi_frame(self) -> bool:
+        return self.is_image and self.frame_count > 1
+
+    @property
+    def frame_width(self) -> int | None:
+        """单帧宽度（单帧块即整块宽度）；无尺寸时 None。"""
+        if self.size is None:
+            return None
+        return int(getattr(self.size, "width")) // self.frame_count
+
+    @property
+    def frame_height(self) -> int | None:
+        if self.size is None:
+            return None
+        return int(getattr(self.size, "height"))
+
+    @property
+    def frame_size(self) -> Any:
+        """单帧 LogoSize（无法构造时返回 None，UI 会退化到整块尺寸）。"""
+        if self.size is None or not self.is_multi_frame:
+            return self.size
+        core = core_bridge.get_core()
+        depth = getattr(self.size, "color_depth", getattr(self.size, "bpp", 4))
+        try:
+            return core.LogoSize(int(self.frame_width), int(self.frame_height), int(depth))
+        except Exception:
+            return None
 
     @property
     def is_unknown(self) -> bool:
@@ -228,7 +268,35 @@ class UiSession:
     def _image_impl(self, index: int) -> Image.Image:
         raise NotImplementedError
 
-    def replace_image(self, index: int, image: Image.Image, *, fit: str = "stretch") -> None:
+    def frame_image(self, index: int, frame: int = 0) -> Image.Image | None:
+        """取块的第 ``frame`` 帧图像；单帧块返回整图（与 :meth:`image` 相同）。"""
+        view = self.block(index)
+        if view is None or not view.is_image:
+            return None
+        if view.frame_count <= 1:
+            return self.image(index)
+        merged = self.image(index)
+        if merged is None:
+            return None
+        frame_index = int(frame)
+        if frame_index < 0:
+            frame_index += view.frame_count
+        if not 0 <= frame_index < view.frame_count:
+            raise IndexError(f"帧索引越界：{frame}（块 {index} 共 {view.frame_count} 帧）")
+        width = int(view.frame_width or merged.width)
+        return merged.crop((width * frame_index, 0, width * (frame_index + 1), merged.height))
+
+    def frame_size(self, index: int) -> Any:
+        """块的单帧 LogoSize；单帧块返回整块尺寸，未知时 None。"""
+        view = self.block(index)
+        if view is None:
+            return None
+        return view.frame_size
+
+    def replace_frame(
+        self, index: int, frame: int, image: Image.Image, *, fit: str = "stretch"
+    ) -> None:
+        """只替换第 ``frame`` 帧；单帧块等价于 :meth:`replace_image`。"""
         raise NotImplementedError
 
     def restore_original(self, index: int) -> bool:
@@ -393,6 +461,7 @@ class ContainerSession(UiSession):
                 size=size,
                 decompressed_len=size_key(size),
                 compressed_len=compressed_len,
+                frame_count=int(getattr(block, "frame_count", 1) or 1),
             )
         if index in self._pending and pixels is not None:
             return BlockView(
@@ -452,6 +521,52 @@ class ContainerSession(UiSession):
             return block.to_image()
         return core.pixels_to_image(bytes(block.pixels), size)
 
+    def frame_image(self, index: int, frame: int = 0) -> Image.Image | None:
+        view = self.block(index)
+        if view is None or not view.is_image:
+            return None
+        if view.frame_count <= 1:
+            return self.image(index)
+        block = self.container.blocks[index]
+        getter = getattr(block, "get_frame", None)
+        if callable(getter):
+            try:
+                image = getter(int(frame))
+            except Exception:
+                image = None
+            if image is not None:
+                return image.convert("RGBA") if image.mode != "RGBA" else image
+        return super().frame_image(index, frame)
+
+    def replace_frame(
+        self, index: int, frame: int, image: Image.Image, *, fit: str = "stretch"
+    ) -> None:
+        view = self.block(index)
+        if view is None:
+            raise IndexError(f"block index out of range: {index}")
+        if not view.is_image or view.size is None:
+            raise ValueError("该块尚未识别分辨率，请先识别尺寸再替换图片")
+        if view.frame_count <= 1:
+            self.replace_image(index, image, fit=fit)
+            return
+        block = self.container.blocks[index]
+        setter = getattr(block, "set_frame", None)
+        if not callable(setter):
+            raise ValueError("当前核心库不支持按帧替换图片，请升级 logobuilder.core")
+        try:
+            frame_index = int(frame)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"帧索引无效：{frame!r}") from exc
+        if not 0 <= frame_index < view.frame_count:
+            raise IndexError(f"帧索引越界：{frame}（块 {index} 共 {view.frame_count} 帧）")
+        # 第一次修改前深拷贝原始块（set_frame 会原地修改 pixels），供「恢复原图」使用
+        if index not in self._originals:
+            self._originals[index] = copy.deepcopy(block)
+        setter(frame_index, image, fit=fit)
+        self._sync_block(index)
+        self._blocks[index].modified = True
+        self.invalidate(index)
+
     def replace_image(self, index: int, image: Image.Image, *, fit: str = "stretch") -> None:
         view = self.block(index)
         if view is None:
@@ -460,7 +575,7 @@ class ContainerSession(UiSession):
             raise ValueError("该块尚未识别分辨率，请先识别尺寸再替换图片")
         core = core_bridge.get_core()
         pixels = core.image_to_pixels(image, view.size, fit=fit)
-        new_block = self._make_image_block(index, view.size, pixels)
+        new_block = self._make_image_block(index, view.size, pixels, frame_count=view.frame_count)
         # 第一次修改时保存原始块，供「恢复原图」
         if index not in self._originals:
             self._originals[index] = self.container.blocks[index]
@@ -470,16 +585,30 @@ class ContainerSession(UiSession):
         self._blocks[index].modified = True
         self.invalidate(index)
 
-    def _make_image_block(self, index: int, size: Any, pixels: bytes) -> Any:
+    def _make_image_block(
+        self, index: int, size: Any, pixels: bytes, *, frame_count: int = 1
+    ) -> Any:
         core = core_bridge.get_core()
         cls = core.ImageBlock
+        count = max(1, int(frame_count))
         try:
-            return cls(index=index, size=size, pixels=pixels, raw_compressed=None)
+            return cls(
+                index=index,
+                size=size,
+                pixels=pixels,
+                raw_compressed=None,
+                frame_count=count,
+            )
         except TypeError:
             try:
-                return cls(index, size, pixels, None)
+                block = cls(index, size, pixels, None)
             except TypeError:
-                return cls(index, size, pixels)
+                block = cls(index, size, pixels)
+            try:
+                block.frame_count = count
+            except Exception:
+                pass
+            return block
 
     def restore_original(self, index: int) -> bool:
         original = self._originals.pop(index, None)
@@ -573,6 +702,7 @@ class ProjectSession(UiSession):
                     size=size,
                     decompressed_len=size_key(size) if size is not None else None,
                     modified=bool(getattr(pb, "modified", False)),
+                    frame_count=int(getattr(pb, "frame_count", 1) or 1),
                 )
             )
         self._blocks = views
@@ -617,6 +747,47 @@ class ProjectSession(UiSession):
         if index not in self._originals_pil:
             self._originals_pil[index] = image.copy()
         return image
+
+    def replace_frame(
+        self, index: int, frame: int, image: Image.Image, *, fit: str = "stretch"
+    ) -> None:
+        view = self.block(index)
+        if view is None:
+            raise IndexError(f"block index out of range: {index}")
+        if not view.is_image or view.size is None:
+            raise ValueError("该块不是已识别尺寸的图像块，无法替换图片")
+        if view.frame_count <= 1:
+            self.replace_image(index, image, fit=fit)
+            return
+        try:
+            frame_index = int(frame)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"帧索引无效：{frame!r}") from exc
+        if not 0 <= frame_index < view.frame_count:
+            raise IndexError(f"帧索引越界：{frame}（块 {index} 共 {view.frame_count} 帧）")
+        merged = self.image(index)
+        if merged is None:
+            raise ValueError("读取项目图片失败，无法替换帧")
+        frame_size = self.frame_size(index) or view.size
+        core = core_bridge.get_core()
+        try:
+            pixels = core.image_to_pixels(image, frame_size, fit=fit)
+            frame_image = core.pixels_to_image(pixels, frame_size)
+        except Exception:
+            frame_image = image.convert("RGBA") if image.mode != "RGBA" else image
+            frame_image = frame_image.resize(
+                (int(view.frame_width or frame_size.width), int(view.frame_height or frame_size.height)),
+                getattr(Image, "Resampling", Image).LANCZOS,
+            )
+        if frame_image.mode != "RGBA":
+            frame_image = frame_image.convert("RGBA")
+        combined = merged.copy()
+        offset_x = int(view.frame_width or combined.width) * frame_index
+        combined.paste(frame_image, (offset_x, 0))
+        self.project.replace_image(index, combined, fit="stretch")
+        self.project.save()
+        view.modified = True
+        self.invalidate(index)
 
     def replace_image(self, index: int, image: Image.Image, *, fit: str = "stretch") -> None:
         view = self.block(index)

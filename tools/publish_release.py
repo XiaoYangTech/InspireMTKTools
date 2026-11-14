@@ -147,8 +147,12 @@ def main() -> int:
     status, assets = api(f"{base}/releases/{release_id}/assets", token)
     existing = {a.get("name") for a in assets} if isinstance(assets, list) else set()
     if EXE.name in existing:
-        print("asset already uploaded")
-        return 0
+        # 资产已存在：删除旧附件后重新上传（用于内容更新后替换）
+        for asset in assets:
+            if asset.get("name") == EXE.name:
+                print("delete old asset", asset.get("size"))
+                status, _ = api(f"{base}/releases/assets/{asset['id']}", token, method="DELETE")
+                print("delete ->", status)
     status, result = upload_asset(token, release_id, EXE)
     print("upload ->", status)
     if isinstance(result, dict):

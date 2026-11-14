@@ -22,9 +22,11 @@
 
 from __future__ import annotations
 
+import array
 import hashlib
 import os
 import struct
+import sys
 import tempfile
 import zlib
 from dataclasses import dataclass, field
@@ -112,6 +114,71 @@ def _opaque_alpha_ratio(data: bytes) -> float:
     return sum(1 for value in alpha if value == 0xFF) / len(alpha)
 
 
+def _detect_frame_pair(pixels: bytes, size: LogoSize) -> int:
+    """检测"左右双帧并排"布局：返回 1（普通图）或 2（左右两帧）。
+
+    判定条件（保守，只针对很宽且左右两半高度相似的数据）：
+
+    * 宽度可被 2 整除；
+    * 宽高比 >= 2.0（左右并排的帧才会这么宽）；
+    * 左右两半逐字节相同比例 >= 0.90（同一动画的两帧通常几乎一样）；
+    * 图像不是全黑/空白（避免把纯色块误判成双帧）。
+    """
+    width, height = size.width, size.height
+    if width % 2 or width < 32 or height <= 0:
+        return 1
+    if width / height < 2.0:
+        return 1
+    bpp = size.color_depth
+    half = width // 2
+    pixel_count = width * height
+    if len(pixels) < pixel_count * bpp:  # pragma: no cover - 由调用方保证
+        return 1
+    try:
+        # 按"像素"比较（4bpp 用 uint32、2bpp 用 uint16），比逐字节循环快数倍
+        values = array.array("I" if bpp == 4 else "H")
+        values.frombytes(pixels[: pixel_count * bpp])
+        if sys.byteorder != "little":  # pragma: no cover - 大端平台极少
+            values.byteswap()
+    except (ValueError, TypeError):  # pragma: no cover - 防御
+        return 1
+    mask = 0x00FFFFFF if bpp == 4 else 0xFFFF
+    equal = 0
+    left_content = right_content = 0
+    both_content = union_content = 0
+    # 抽样行（约 40 行）即可可靠识别；避免对每块做全量像素比较导致打开大镜像变慢
+    step = max(1, height // 40)
+    rows = 0
+    for y in range(0, height, step):
+        base = y * width
+        rows += 1
+        for x in range(half):
+            left_value = values[base + x]
+            right_value = values[base + half + x]
+            if left_value == right_value:
+                equal += 1
+            left_has = (left_value & mask) != 0
+            right_has = (right_value & mask) != 0
+            if left_has:
+                left_content += 1
+                union_content += 1
+            if right_has:
+                right_content += 1
+                if not left_has:
+                    union_content += 1
+            if left_has and right_has:
+                both_content += 1
+    total = half * rows
+    if not total:
+        return 1
+    min_content = max(2, int(total * 0.005))
+    if left_content < min_content or right_content < min_content:
+        return 1
+    mask_iou = both_content / union_content if union_content else 0.0
+    # 两帧：像素高度相似 + 内容位置几乎重合；内容左右完全不同 / 位置错开的图不会命中
+    return 2 if equal / total >= 0.85 and mask_iou >= 0.85 else 1
+
+
 def _looks_like_block_table(blob: bytes) -> bool:
     """轻量结构探测：payload 是否像一个自洽的块表（不解压数据）。"""
     available = len(blob) - HEADER_SIZE
@@ -179,6 +246,9 @@ class ImageBlock:
     size: LogoSize
     pixels: bytes
     raw_compressed: bytes | None = None
+    #: 块内左右并排的帧数（1 = 普通单图；2 = 左右双帧，如 480x160 = 2 x 240x160）。
+    #: 仅影响预览/编辑方式，不改变磁盘字节布局（整块像素仍按 ``pixels`` 原样写回）。
+    frame_count: int = 1
 
     # 私有字段：用于判断"内容是否被修改过"，未修改则回包复用原始 zlib 字节。
     _parsed_pixels: bytes | None = field(default=None, repr=False, compare=False, kw_only=True)
@@ -195,11 +265,79 @@ class ImageBlock:
             )
         if self.raw_compressed is not None:
             self.raw_compressed = bytes(self.raw_compressed)
+        count = self.frame_count
+        if isinstance(count, bool) or not isinstance(count, int):
+            raise ValueError(f"ImageBlock({self.index}).frame_count 必须是整数，收到 {count!r}")
+        if count < 1 or count > 8:
+            raise ValueError(f"ImageBlock({self.index}).frame_count 必须在 1..8，收到 {count}")
+        if self.size.width % count:
+            raise ValueError(
+                f"ImageBlock({self.index}).frame_count={count} 无法整除宽度 {self.size.width}"
+            )
+        self.frame_count = count
 
     # -- 便捷方法 ------------------------------------------------------
     def to_image(self) -> Image.Image:
-        """转换为 Pillow RGBA 图像。"""
+        """转换为 Pillow RGBA 图像（左右帧并排的完整图）。"""
         return pixel.pixels_to_image(self.pixels, self.size)
+
+    # -- 左右双帧支持 --------------------------------------------------
+    @property
+    def frame_width(self) -> int:
+        """单帧宽度（frame_count == 1 时等于整块宽度）。"""
+        return self.size.width // self.frame_count
+
+    @property
+    def frame_size(self) -> LogoSize:
+        """单帧尺寸（宽度 = 整块宽度 / 帧数）。"""
+        return LogoSize(self.frame_width, self.size.height, self.size.color_depth)
+
+    def frames(self) -> list[Image.Image]:
+        """把块拆成左右并排的帧图像列表；单帧块返回长度 1 的列表。"""
+        image = self.to_image()
+        if self.frame_count == 1:
+            return [image]
+        width = self.frame_width
+        height = self.size.height
+        return [
+            image.crop((i * width, 0, (i + 1) * width, height))
+            for i in range(self.frame_count)
+        ]
+
+    def get_frame(self, frame_index: int) -> Image.Image:
+        """取第 ``frame_index`` 帧（从 0 开始）的 Pillow RGBA 图。"""
+        index = int(frame_index)
+        if index < 0:
+            index += self.frame_count
+        if not 0 <= index < self.frame_count:
+            raise IndexError(
+                f"帧索引越界：{frame_index}（块 {self.index} 共 {self.frame_count} 帧）"
+            )
+        return self.frames()[index]
+
+    def set_frame(self, frame_index: int, image: Any, *, fit: str = "stretch") -> None:
+        """替换第 ``frame_index`` 帧，并写回整块像素。
+
+        ``image`` 会按单帧尺寸缩放（``fit`` 语义同 :func:`pixel.resize_image`）。
+        """
+        index = int(frame_index)
+        if not 0 <= index < self.frame_count:
+            raise IndexError(
+                f"帧索引越界：{frame_index}（块 {self.index} 共 {self.frame_count} 帧）"
+            )
+        frame_size = self.frame_size
+        frame_pixels = pixel.image_to_pixels(image, frame_size, fit=fit)
+        bpp = self.size.color_depth
+        full_row = self.size.width * bpp
+        frame_row = frame_size.width * bpp
+        offset = index * frame_row
+        buffer = bytearray(self.pixels)
+        for y in range(frame_size.height):
+            src = y * frame_row
+            dst = y * full_row + offset
+            buffer[dst : dst + frame_row] = frame_pixels[src : src + frame_row]
+        self.pixels = bytes(buffer)
+        self._parsed_key = None  # 帧被替换 -> 内容已改动
 
     @property
     def modified(self) -> bool:
@@ -440,8 +578,18 @@ class LogoContainer:
                 result.append((block.index, block.to_image()))
         return result
 
-    def assign_size(self, block_index: int, size: LogoSize) -> ImageBlock:
-        """把一个尺寸未知的块（BinaryBlock）指定尺寸并转为 ImageBlock。"""
+    def assign_size(
+        self,
+        block_index: int,
+        size: LogoSize,
+        *,
+        frame_count: int | None = None,
+    ) -> ImageBlock:
+        """把一个尺寸未知的块（BinaryBlock）指定尺寸并转为 ImageBlock。
+
+        ``frame_count`` 为 ``None`` 时保持（或自动检测）原有帧数；显式传 1/2 可强制
+        单帧/左右双帧。
+        """
         if not isinstance(size, LogoSize):
             raise TypeError(f"size 必须是 LogoSize，收到 {type(size).__name__}")
         block = self.block_at(block_index)
@@ -453,6 +601,13 @@ class LogoContainer:
                     context={"block_index": block_index},
                 )
             block.size = size
+            if frame_count is not None:
+                if size.width % int(frame_count):
+                    raise CorruptContainer(
+                        f"帧数 {frame_count} 无法整除宽度 {size.width}",
+                        context={"block_index": block_index},
+                    )
+                block.frame_count = int(frame_count)
             return block
         if not block.decompressed_ok:
             raise CorruptContainer(
@@ -465,11 +620,17 @@ class LogoContainer:
                 hint="请选择与块数据长度匹配的分辨率/色深，或把该分辨率加入 sizes.txt。",
                 context={"block_index": block_index, "actual": len(block.data), "expected": size.key},
             )
+        resolved_frames = (
+            int(frame_count)
+            if frame_count is not None
+            else _detect_frame_pair(block.data, size)
+        )
         image_block = ImageBlock(
             index=block_index,
             size=size,
             pixels=block.data,
             raw_compressed=block.raw_compressed,
+            frame_count=resolved_frames,
         )
         # 数据未修改：允许回包复用原始 zlib 字节
         if block.raw_compressed is not None:
@@ -563,6 +724,16 @@ class LogoContainer:
             mode = "block-table"
             raw_payload = b""
             warnings.extend(table_warnings)
+            pair_blocks = [
+                block for block in blocks
+                if isinstance(block, ImageBlock) and block.frame_count > 1
+            ]
+            if pair_blocks:
+                sample = pair_blocks[0]
+                warnings.append(
+                    f"检测到 {len(pair_blocks)} 个左右双帧块（如第 {sample.index} 块 "
+                    f"{sample.size} → 每帧 {sample.frame_size}），预览/编辑按双帧处理"
+                )
         except CorruptContainer as exc:
             if tag.upper() == LOGO_TAG:
                 raise
@@ -765,7 +936,14 @@ class LogoContainer:
                             size = max(rgb565, key=lambda c: c.score).size
 
         if size is not None:
-            block = ImageBlock(index=index, size=size, pixels=decompressed, raw_compressed=raw)
+            frame_count = _detect_frame_pair(decompressed, size)
+            block = ImageBlock(
+                index=index,
+                size=size,
+                pixels=decompressed,
+                raw_compressed=raw,
+                frame_count=frame_count,
+            )
             block._parsed_pixels = block.pixels
             block._parsed_key = size.key
             return block, False, []
@@ -805,6 +983,8 @@ class LogoContainer:
                         "bpp": block.size.color_depth,
                         "pixels_len": len(block.pixels),
                         "compressed_len": None if block.raw_compressed is None else len(block.raw_compressed),
+                        "frame_count": block.frame_count,
+                        "frame_width": block.frame_width,
                         "modified": block.modified,
                     }
                 )

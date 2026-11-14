@@ -84,6 +84,8 @@ class ProjectBlock:
     binary_path: Path | None = None
     raw_compressed_path: Path | None = None
     modified: bool = False
+    #: 左右并排帧数（1=普通图；2=左右双帧，例如 480x160 = 2 x 240x160）。
+    frame_count: int = 1
     # 以下为 additive 扩展（GUI 通常不需要关心）
     decompressed_ok: bool = True
     image_sha256: str | None = None
@@ -98,11 +100,21 @@ class ProjectBlock:
                 setattr(self, name, Path(value))
         if self.size is not None and not isinstance(self.size, LogoSize):
             raise ValueError(f"ProjectBlock.size 必须是 LogoSize 或 None，收到 {type(self.size).__name__}")
+        if isinstance(self.frame_count, bool) or not isinstance(self.frame_count, int):
+            raise ValueError(f"ProjectBlock.frame_count 必须是整数，收到 {self.frame_count!r}")
+        if not 1 <= self.frame_count <= 8:
+            raise ValueError(f"ProjectBlock.frame_count 必须在 1..8，收到 {self.frame_count}")
+        if self.size is not None and self.size.width % self.frame_count:
+            raise ValueError(
+                f"ProjectBlock.frame_count={self.frame_count} 无法整除宽度 {self.size.width}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {"index": self.index, "kind": self.kind}
         if self.size is not None:
             data["size"] = str(self.size)
+        if self.frame_count > 1:
+            data["frames"] = self.frame_count
         if self.image_path is not None:
             data["image"] = self.image_path.as_posix()
         if self.binary_path is not None:
@@ -371,6 +383,7 @@ class LogoProject:
                         image_path=image_rel,
                         raw_compressed_path=raw_rel,
                         modified=False,
+                        frame_count=int(getattr(block, "frame_count", 1) or 1),
                         image_sha256=_sha256_file(directory / image_rel),
                     )
                 )
@@ -507,6 +520,7 @@ class LogoProject:
                     binary_path=binary_path,
                     raw_compressed_path=raw_path,
                     modified=bool(item.get("modified", False)),
+                    frame_count=int(item.get("frames", 1) or 1),
                     decompressed_ok=bool(item.get("decompressed_ok", True)),
                     image_sha256=item.get("image_sha256"),
                     binary_sha256=item.get("binary_sha256"),
@@ -933,7 +947,9 @@ class LogoProject:
             raw_path = self.project_dir / block.raw_compressed_path  # type: ignore[arg-type]
             if not image_path.exists() or not self._image_file_changed(block, image_path):
                 try:
-                    return ImageBlock.preserved(block.index, block.size, raw_path.read_bytes())
+                    preserved = ImageBlock.preserved(block.index, block.size, raw_path.read_bytes())
+                    preserved.frame_count = int(block.frame_count or 1)
+                    return preserved
                 except (zlib.error, CorruptContainer):
                     pass
         if not image_path.exists():
@@ -943,7 +959,13 @@ class LogoProject:
             )
         image = _load_image_rgba(image_path)
         pixels = pixel.image_to_pixels(image, block.size, "stretch")
-        return ImageBlock(index=block.index, size=block.size, pixels=pixels, raw_compressed=None)
+        return ImageBlock(
+            index=block.index,
+            size=block.size,
+            pixels=pixels,
+            raw_compressed=None,
+            frame_count=int(block.frame_count or 1),
+        )
 
     def _build_binary_block(self, block: ProjectBlock) -> BinaryBlock:
         if block.binary_path is None:

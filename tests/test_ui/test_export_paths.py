@@ -22,9 +22,9 @@ def loaded_app(app, core, tmp_path):
 
 def test_open_container_shows_blocks(loaded_app):
     app, session, _source = loaded_app
-    assert session.count == 7
+    assert session.count == 8  # 6 单帧图 + 1 双帧图 + 1 二进制块
     assert session.tag == "LOGO"
-    assert len(app.block_list.cards) == 7
+    assert len(app.block_list.cards) == 8
     assert app.selected_index == 0
     assert app.preview._current_view() is not None
     assert str(app.toolbar.button_by_action("export_logo_img").cget("state")) == "normal"

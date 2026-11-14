@@ -44,6 +44,9 @@ class PreviewPanel(tk.Frame):
         self.fonts = fonts
         self.session: UiSession | None = None
         self.index: int = -1
+        self.frame_index: int = 0  # 双帧块当前预览/编辑的帧（0 起）
+        self.frame_var = tk.IntVar(value=0)
+        self.frame_buttons: list[Any] = []
         self.zoom_mode = "fit"  # fit | one
         self._photo: Any = None
         self._checker_photo: Any = None
@@ -92,6 +95,27 @@ class PreviewPanel(tk.Frame):
             font=fonts.small,
         )
         self.fit_button.pack(side="right")
+
+        # ── 帧选择（左右双帧块才显示）────────────────────
+        self.frame_bar = tk.Frame(self, bg=palette.surface)
+        self.frame_label = tk.Label(
+            self.frame_bar,
+            text=app.tr.t("preview.frame_label"),
+            bg=palette.surface,
+            fg=palette.muted,
+            font=fonts.small,
+        )
+        self.frame_label.pack(side="left", padx=(0, m.px(8)))
+        self.frame_buttons_frame = tk.Frame(self.frame_bar, bg=palette.surface)
+        self.frame_buttons_frame.pack(side="left")
+        self.frame_hint = tk.Label(
+            self.frame_bar,
+            text="",
+            bg=palette.surface,
+            fg=palette.muted,
+            font=fonts.tiny,
+        )
+        self.frame_hint.pack(side="left", padx=(m.px(10), 0))
 
         # ── 操作栏 ────────────────────────────────────────
         actions = tk.Frame(self, bg=palette.surface)
@@ -169,6 +193,7 @@ class PreviewPanel(tk.Frame):
             ("kind", "preview.info_kind"),
             ("uncompressed", "preview.info_uncompressed"),
             ("compressed", "preview.info_compressed"),
+            ("frame_layout", "preview.info_frame_layout"),
             ("status", "preview.info_status"),
         )
         self.info_tiles: dict[str, tk.Frame] = {}
@@ -216,14 +241,87 @@ class PreviewPanel(tk.Frame):
     def set_session(self, session: UiSession | None) -> None:
         self.session = session
         self.index = -1
+        self.frame_index = 0
+        self.frame_var.set(0)
         self._resize_cache.clear()
         self.show_block(-1)
 
     def show_block(self, index: int) -> None:
+        previous = self.index
         self.index = index
-        self._update_action_state(self._current_view())
-        self._update_info(self._current_view())
+        view = self._current_view()
+        if index != previous or view is None or not view.is_multi_frame:
+            self.frame_index = 0
+            self.frame_var.set(0)
+        self._update_frame_controls(view)
+        self._update_action_state(view)
+        self._update_info(view)
         self._schedule_redraw(force=True)
+
+    def set_frame(self, frame: int) -> None:
+        """切换到第 ``frame`` 帧（0 起）；切换后立即刷新预览与信息卡。"""
+        view = self._current_view()
+        if view is None or not view.is_multi_frame:
+            self.frame_index = 0
+            self.frame_var.set(0)
+            self._update_info(view)
+            self._schedule_redraw(force=True)
+            return
+        index = max(0, min(int(frame), view.frame_count - 1))
+        if index == self.frame_index:
+            return
+        self.frame_index = index
+        self.frame_var.set(index)
+        self._resize_cache.clear()
+        self._update_info(view)
+        self._schedule_redraw(force=True)
+
+    def reset_frame(self) -> None:
+        """恢复原图/切换会话后回到帧 1。"""
+        self.frame_index = 0
+        self.frame_var.set(0)
+        self._update_info(self._current_view())
+        self._resize_cache.clear()
+        self._schedule_redraw(force=True)
+
+    def _update_frame_controls(self, view: BlockView | None) -> None:
+        """双帧块显示「帧选择」；单帧块隐藏。"""
+        for child in list(self.frame_buttons_frame.winfo_children()):
+            child.destroy()
+        self.frame_buttons = []
+        if view is None or not view.is_multi_frame:
+            try:
+                self.frame_bar.pack_forget()
+            except Exception:
+                pass
+            self.frame_hint.configure(text="")
+            return
+        tr = self.app.tr
+        self.frame_index = max(0, min(self.frame_index, view.frame_count - 1))
+        self.frame_var.set(self.frame_index)
+        for frame in range(view.frame_count):
+            button = tb.Radiobutton(
+                self.frame_buttons_frame,
+                text=tr.t("preview.frame_n", n=frame + 1),
+                value=frame,
+                variable=self.frame_var,
+                bootstyle="primary",
+                command=lambda value=frame: self.set_frame(value),
+                takefocus=True,
+            )
+            button.pack(side="left", padx=(0, self.metrics.px(10)))
+            self.frame_buttons.append(button)
+        self.frame_hint.configure(
+            text=tr.t("preview.frame_layout_pair", width=view.frame_width, height=view.frame_height)
+            if view.frame_count == 2
+            else tr.t(
+                "preview.frame_layout_multi",
+                count=view.frame_count,
+                width=view.frame_width,
+                height=view.frame_height,
+            )
+        )
+        self.frame_bar.pack(fill="x", padx=self.metrics.px(12), pady=(self.metrics.px(2), 0), after=self.frame_bar.master.winfo_children()[0])
 
     def refresh(self) -> None:
         self._resize_cache.clear()
@@ -307,6 +405,21 @@ class PreviewPanel(tk.Frame):
             "unknown": tr.t("blocks.status_unknown"),
             "binary": tr.t("blocks.status_binary"),
         }
+        if view.is_image and view.is_multi_frame:
+            width = view.frame_width
+            height = view.frame_height
+            if view.frame_count == 2:
+                frame_layout = tr.t("preview.frame_layout_pair", width=width, height=height)
+            else:
+                frame_layout = tr.t(
+                    "preview.frame_layout_multi",
+                    count=view.frame_count,
+                    width=width,
+                    height=height,
+                )
+        else:
+            frame_layout = tr.t("preview.frame_layout_single") if view.is_image else "—"
+        self._info_vars["frame_layout"].set(frame_layout)
         self._info_vars["status"].set(status_map.get(view.status, "—"))
 
     # ── 重绘 ─────────────────────────────────────────────
@@ -338,7 +451,7 @@ class PreviewPanel(tk.Frame):
             return
         view = self._current_view()
         revision = self.session.revision if self.session is not None else 0
-        key = (width, height, self.index, revision, self.zoom_mode)
+        key = (width, height, self.index, revision, self.zoom_mode, self.frame_index)
         if key == self._canvas_key:
             return
         self._canvas_key = key
@@ -423,7 +536,11 @@ class PreviewPanel(tk.Frame):
         m = self.metrics
         session = self.session
         assert session is not None
-        image = session.image(view.index)
+        image = (
+            session.frame_image(view.index, self.frame_index)
+            if view.is_multi_frame
+            else session.image(view.index)
+        )
         if image is None:
             self._draw_hint(width, height, view.note or self.app.tr.t("preview.empty_canvas"))
             return
@@ -448,7 +565,7 @@ class PreviewPanel(tk.Frame):
                 canvas.xview_moveto(0)
                 canvas.yview_moveto(0)
                 offset = (pad, pad)
-        cache_key = (view.index, session.revision, self.zoom_mode, display_size)
+        cache_key = (view.index, session.revision, self.zoom_mode, display_size, self.frame_index)
         photo = self._resize_cache.get(cache_key)
         if photo is None:
             resized = image.resize(display_size, self._resample())

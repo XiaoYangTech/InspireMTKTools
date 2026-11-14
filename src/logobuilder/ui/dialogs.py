@@ -717,11 +717,13 @@ class ReplaceImageDialog(BaseDialog):
         block_index: int,
         target_size: Any,
         current_image: Image.Image | None = None,
+        frame_hint: str | None = None,
     ) -> None:
         super().__init__(app, app.tr.t("replace.title"))
         self.block_index = block_index
         self.target_size = target_size
         self.current_image = current_image
+        self.frame_hint = frame_hint
         self.source_image: Image.Image | None = None
         self.source_path: Path | None = None
         self._original_photo: Any = None
@@ -756,7 +758,14 @@ class ReplaceImageDialog(BaseDialog):
         ).pack(side="left")
         tk.Label(
             header,
-            text=tr.t("replace.target", index=self.block_index + 1, size=session_mod.size_to_text(self.target_size, compact=False)),
+            text=(
+                tr.t(
+                    "replace.target",
+                    index=self.block_index + 1,
+                    size=session_mod.size_to_text(self.target_size, compact=False),
+                )
+                + (f" · {self.frame_hint}" if self.frame_hint else "")
+            ),
             bg=palette.window_bg,
             fg=palette.muted,
             font=self.fonts.small,

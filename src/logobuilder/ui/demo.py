@@ -76,6 +76,10 @@ def build_demo_image(size: tuple[int, int], index: int) -> Image.Image:
     labels = ("亿方工具箱", "联发科", "开机 Logo", "logo.bin", "第二屏", "LOGO")
     text = labels[index % len(labels)]
     _draw_center_text(image, text, size_ratio=0.13, color=text_color)
+    if index == 3:
+        # 进度条示例：左右半边明显不同，避免被核心的左右双帧启发式误判
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((0, 0, size[0] // 2, size[1]), fill=(250, 204, 21))
     # 底部小字，增加层次
     _draw_center_text(
         image,
@@ -85,6 +89,38 @@ def build_demo_image(size: tuple[int, int], index: int) -> Image.Image:
         offset_ratio=0.22,
     )
     return image
+
+
+def build_frame_pair_image() -> Image.Image:
+    """构造左右双帧示例：480x160 = 帧1(240x160) | 帧2(240x160)。
+
+    两帧共享同一渐变背景，只在中心小区域有差异（模拟动画帧），
+    这样核心的保守双帧检测（左右两半相似度 >= 90%）也能自动识别。
+    """
+    frame_width, frame_height = 240, 160
+    base = _gradient((frame_width, frame_height), (10, 24, 52), (37, 99, 235))
+    frames: list[Image.Image] = []
+    for frame in range(2):
+        image = base.copy()
+        draw = ImageDraw.Draw(image)
+        # 帧间差异：中心小圆点 + 小数字轻微位移，像素占比很小
+        cx = frame_width // 2 + (5 if frame else -5)
+        cy = frame_height // 2
+        draw.ellipse(
+            (cx - 18, cy - 18, cx + 18, cy + 18),
+            fill=(250, 204, 21) if frame == 0 else (248, 113, 22),
+        )
+        _draw_center_text(
+            image,
+            str(frame + 1),
+            size_ratio=0.16,
+            color="#0f172a" if frame == 0 else "#ffffff",
+        )
+        frames.append(image)
+    merged = Image.new("RGBA", (frame_width * 2, frame_height), (0, 0, 0, 0))
+    merged.paste(frames[0].convert("RGBA"), (0, 0))
+    merged.paste(frames[1].convert("RGBA"), (frame_width, 0))
+    return merged
 
 
 def build_container_header() -> bytes:
@@ -98,13 +134,35 @@ def build_container_header() -> bytes:
 
 
 def build_demo_container(core: Any) -> Any:
-    """用 core 公共 API 组装一个小型演示容器（6 图像块 + 1 二进制块）。"""
+    """用 core 公共 API 组装一个小型演示容器（6 单帧图 + 1 双帧图 + 1 二进制块）。"""
     blocks: list[Any] = []
     for index, (width, height, depth, _label) in enumerate(_DEMO_SIZES):
         size = core.LogoSize(width, height, depth)
         image = build_demo_image((width, height), index)
         pixels = core.image_to_pixels(image, size, fit="stretch")
         blocks.append(core.ImageBlock(index=index, size=size, pixels=pixels, raw_compressed=None))
+    # 双帧示例块：480x160 BGRA = 2 x 240x160 左右并排动画帧
+    pair_size = core.LogoSize(480, 160, 4)
+    pair_pixels = core.image_to_pixels(build_frame_pair_image(), pair_size, fit="stretch")
+    pair_index = len(blocks)
+    try:
+        pair_block = core.ImageBlock(
+            index=pair_index,
+            size=pair_size,
+            pixels=pair_pixels,
+            raw_compressed=None,
+            frame_count=2,
+        )
+    except TypeError:  # 老核心库不支持 frame_count 参数
+        pair_block = core.ImageBlock(
+            index=pair_index, size=pair_size, pixels=pair_pixels, raw_compressed=None
+        )
+        try:
+            pair_block.frame_count = 2
+        except Exception:
+            pass
+    blocks.append(pair_block)
+
     binary_index = len(blocks)
     binary_data = b"\x00BIN" + bytes(range(256)) * 2
     blocks.append(

@@ -1,8 +1,9 @@
 """``python app.py --screenshot out.png`` 的实现。
 
-生成演示数据并截取（共 12 张，全部 bootstrap-light 浅色）：
+生成演示数据并截取（共 13 张，全部 bootstrap-light 浅色）：
 * 设置 / 分辨率 / 替换图片 / 错误 / 帮助对话框
 * 150% 缩放主窗口
+* 左右双帧示例（选中 480×160 双帧块并切到帧 2）
 * LK 修补面板、补丁预览/校验/刷写说明对话框
 * **最后**再截主窗口 → ``out.png`` 以及 ``analysis/ui_screenshots/main_window.png``
   （保证 README 主图里没有任何对话框/其它窗口遮挡）
@@ -57,6 +58,12 @@ def _prepare_root(app: Any, width: int, height: int) -> None:
     except Exception:
         pass
     wait_ui(root, 320)
+    # 缩放/重建后 sash 可能被压窄，截图统一恢复到设计宽度，保证块列表文字完整
+    try:
+        app.paned.sashpos(0, app.metrics.list_width)
+        app._sash_width = app.metrics.list_width
+    except Exception:
+        pass
 
 
 def _prepare_dialog(app: Any, dialog: Any, width: int, height: int) -> None:
@@ -126,7 +133,7 @@ def run_screenshot(app: Any, out_path: str | Path, repo_root: str | Path | None 
     from . import demo
 
     print("=" * 72)
-    print("LogoBuilder v2.0 截图（--screenshot）")
+    print("亿方联发科工具箱 / InspireMTKTools v3.0.0 截图（--screenshot）")
     print("=" * 72)
     try:
         app.test_mode = True
@@ -224,7 +231,40 @@ def run_screenshot(app: Any, out_path: str | Path, repo_root: str | Path | None 
             base = app.metrics
             _prepare_root(app, base.window_default_width, base.window_default_height)
 
-            # 8) LK 修补工作区（真实样本优先：analysis/lk/samples/lk_a.bin / lk_b.bin）
+            # 8) 左右双帧示例（选中双帧块 + 切到帧 2）
+            try:
+                app.show_logo_panel()
+                pair_view = None
+                if app.session is not None:
+                    pair_view = next(
+                        (
+                            view
+                            for view in app.session.blocks
+                            if view.is_multi_frame
+                            and view.size is not None
+                            and view.size.width == 480
+                            and view.size.height == 160
+                        ),
+                        None,
+                    )
+                if pair_view is not None:
+                    _prepare_root(app, base.window_default_width, base.window_default_height)
+                    app.block_list.select(pair_view.index, notify=True)
+                    app.preview.set_frame(pair_view.frame_count - 1)
+                    wait_ui(app.root, 260)
+                    _capture(
+                        app,
+                        app.root,
+                        shots_dir / "frame_pair.png",
+                        label="左右双帧示例（帧2）",
+                        results=results,
+                    )
+                else:
+                    print("  [warn] 演示数据没有双帧块，跳过 frame_pair.png")
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [warn] 双帧截图失败：{exc}")
+
+            # 9) LK 修补工作区（真实样本优先：analysis/lk/samples/lk_a.bin / lk_b.bin）
             _capture_lk_screens(app, tmp, shots_dir, results)
 
             # 9) 收尾：所有对话框关闭后回到 Logo 工作区再截主窗口，保证 README 主图干净
@@ -235,6 +275,11 @@ def run_screenshot(app: Any, out_path: str | Path, repo_root: str | Path | None 
             except Exception:
                 pass
             _prepare_root(app, base.window_default_width, base.window_default_height)
+            try:
+                app.block_list.select(0, notify=True)
+            except Exception:
+                pass
+            wait_ui(app.root, 200)
             main_target = Path(out_path)
             _capture(app, app.root, main_target, label="主窗口（100%）", results=results)
             _capture(app, app.root, shots_dir / "main_window.png", label="主窗口（备份）", results=results)

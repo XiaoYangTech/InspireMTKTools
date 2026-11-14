@@ -184,9 +184,17 @@ def _cmd_info(args: argparse.Namespace) -> int:
     for block in summary["blocks"]:
         if block["kind"] == "image":
             raw_len = block["compressed_len"]
+            frame_note = ""
+            frame_count = int(block.get("frame_count", 1) or 1)
+            if frame_count > 1:
+                frame_note = (
+                    f"  [左右{frame_count}帧，每帧 "
+                    f"{block['width'] // frame_count}x{block['height']}x{block['bpp']}]"
+                )
             print(
                 f"  [{block['index']:>3}] 图像 {block['size']:<12} "
                 f"压缩 {raw_len if raw_len is not None else '?':>8} B -> {block['pixels_len']:>9} B"
+                + frame_note
                 + ("  (已修改)" if block["modified"] else "")
             )
         else:

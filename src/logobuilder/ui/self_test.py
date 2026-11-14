@@ -33,7 +33,7 @@ def _print_step(name: str) -> None:
 def run_self_test(app: Any) -> int:
     """执行自检；返回进程退出码（0 = 成功）。"""
     print("=" * 72)
-    print("LogoBuilder v2.0 自检（--self-test）")
+    print("亿方联发科工具箱 / InspireMTKTools v3.0.0 自检（--self-test）")
     print("=" * 72)
     core = core_bridge.get_core()
     print(f"核心库：{getattr(core, '__name__', core)}")
@@ -78,7 +78,62 @@ def run_self_test(app: Any) -> int:
             _print_step("恢复原始图片并再次替换")
             steps += 1
 
-            # 5. 导出 logo.img（带 0xFF 分区填充）
+            # 5. 左右双帧：预览帧切换、按帧替换、恢复整块
+            pair_view = next(
+                (
+                    v
+                    for v in app.session.blocks
+                    if v.is_multi_frame and v.size is not None and v.size.width == 480 and v.size.height == 160
+                ),
+                None,
+            )
+            _check(pair_view is not None, "演示数据缺少左右双帧块")
+            _check(pair_view.frame_count == 2, f"双帧块 frame_count 异常：{pair_view.frame_count}")
+            _check(
+                pair_view.frame_width == pair_view.size.width // 2,
+                f"单帧宽度计算异常：{pair_view.frame_width}",
+            )
+            frame0 = app.session.frame_image(pair_view.index, 0)
+            frame1 = app.session.frame_image(pair_view.index, 1)
+            _check(frame0 is not None and frame1 is not None, "读取双帧图片失败")
+            _check(
+                frame0.size == frame1.size == (pair_view.frame_width, pair_view.frame_height),
+                f"帧尺寸不符：{frame0.size} / {frame1.size}",
+            )
+            _check(frame0.tobytes() != frame1.tobytes(), "双帧示例的两帧应存在差异")
+
+            # 预览面板：帧选择器出现、切到帧 2、只显示当前帧
+            app.block_list.select(pair_view.index, notify=True)
+            app.root.update_idletasks()
+            app.root.update()
+            _check(app.preview.frame_bar.winfo_manager() == "pack", "双帧块未显示帧选择控件")
+            _check(len(app.preview.frame_buttons) == 2, "帧选择按钮数量异常")
+            app.preview.set_frame(1)
+            _check(app.preview.frame_index == 1, "帧切换失败")
+
+            # 只替换第 2 帧：第 1 帧像素必须保持不变
+            from PIL import Image as _Image
+
+            red = _Image.new("RGBA", (pair_view.frame_width, pair_view.frame_height), (255, 0, 0, 255))
+            app.session.replace_frame(pair_view.index, 1, red)
+            after0 = app.session.frame_image(pair_view.index, 0)
+            after1 = app.session.frame_image(pair_view.index, 1)
+            _check(after0 is not None and after0.tobytes() == frame0.tobytes(), "替换帧 2 时改动了帧 1")
+            _check(
+                after1 is not None and after1.getpixel((10, 10)) == (255, 0, 0, 255),
+                "帧 2 未按预期替换",
+            )
+            _check(app.session.can_restore(pair_view.index), "按帧替换后应可恢复原图")
+            _check(app.session.restore_original(pair_view.index), "恢复双帧块失败")
+            restored1 = app.session.frame_image(pair_view.index, 1)
+            _check(restored1 is not None and restored1.tobytes() == frame1.tobytes(), "恢复后帧 2 未还原")
+            app.preview.reset_frame()
+            _check(app.preview.frame_index == 0, "恢复后选中帧未重置为帧 1")
+            _check(app.session.block(pair_view.index).frame_count == 2, "恢复后 frame_count 丢失")
+            _print_step("左右双帧：帧切换 / 按帧替换 / 恢复整块 / 帧数保持")
+            steps += 1
+
+            # 6. 导出 logo.img（带 0xFF 分区填充）
             out_dir = tmp / "out"
             intended = len(app.session.to_bytes()) + 4096
             img_path = out_dir / "logo.img"

@@ -25,6 +25,10 @@ git clone https://cnb.cool/InspireWorks/InspireMTKTools.git
 |---|---|
 | ![主界面](docs/images/main_window.png) | ![LK 修补](docs/images/lk_patch_scan.png) |
 
+| 左右双帧编辑（480×160 = 2×240×160） | LK 补丁预览 |
+|---|---|
+| ![双帧](docs/images/frame_pair.png) | ![LK 预览](docs/images/lk_patch_preview.png) |
+
 | 分辨率自动识别 | 替换图片 |
 |---|---|
 | ![分辨率](docs/images/resolution_dialog.png) | ![替换图片](docs/images/replace_image_dialog.png) |
@@ -41,6 +45,7 @@ git clone https://cnb.cool/InspireWorks/InspireMTKTools.git
 - **未修改块逐字节保留**，真实样本回包 **字节级一致**（SHA-256 相同）
 - 未知尺寸自动识别：内置尺寸表 + 解压长度反查 + 相邻块投票 + 宽高比启发式 → 候选列表 + 置信度 + 实时预览
 - 同字节长度布局判别：`320x480x2`（RGB565）与 `480x160x4`（不透明 BGRA8888）按 alpha 字节自动区分（`sizes.txt` 已含 480x160x4）
+- 左右双帧布局（如 `480x160x4` = 2×`240x160x4`，MTK 动画常见打包方式）自动识别：逐帧预览/替换，导出 PNG 按帧，打包回原始字节布局（已验证原文件 SHA-256 不变）
 
 ### B. LK 引导程序修补
 

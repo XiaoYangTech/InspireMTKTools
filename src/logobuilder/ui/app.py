@@ -1104,26 +1104,46 @@ class LogoBuilderApp:
         if not view.is_image or view.size is None:
             self.set_status(self.tr.t("bootlogo.not_image_block"), "warning")
             return
-        current = session.image(index)
+        frame = self.preview.frame_index if view.is_multi_frame else 0
+        target_size = view.frame_size if view.is_multi_frame else view.size
+        current = (
+            session.frame_image(index, frame) if view.is_multi_frame else session.image(index)
+        )
         if not self.interactive:
             return
+        frame_hint = None
+        if view.is_multi_frame:
+            frame_hint = self.tr.t("replace.frame_hint", n=frame + 1, count=view.frame_count)
         dialog = ReplaceImageDialog(
             self,
             block_index=index,
-            target_size=view.size,
+            target_size=target_size,
             current_image=current,
+            frame_hint=frame_hint,
         )
         result = dialog.show_modal()
         if result is None or result.image is None:
             return
-        self.replace_image_direct(index, result.image, fit=result.fit)
+        self.replace_image_direct(index, result.image, fit=result.fit, frame=frame if view.is_multi_frame else None)
 
-    def replace_image_direct(self, index: int, image: Image.Image, *, fit: str = "stretch") -> bool:
+    def replace_image_direct(
+        self,
+        index: int,
+        image: Image.Image,
+        *,
+        fit: str = "stretch",
+        frame: int | None = None,
+    ) -> bool:
         session = self._require_session()
         if session is None:
             return False
+        view = session.block(index)
+        target_frame = frame
         try:
-            session.replace_image(index, image, fit=fit)
+            if target_frame is not None and view is not None and view.is_multi_frame:
+                session.replace_frame(index, target_frame, image, fit=fit)
+            else:
+                session.replace_image(index, image, fit=fit)
         except Exception as exc:
             self.show_error(exc)
             return False
@@ -1132,7 +1152,10 @@ class LogoBuilderApp:
         self._update_actions()
         self._update_title()
         self._update_status_info()
-        message = self.tr.t("replace.done", index=index + 1)
+        if target_frame is not None and view is not None and view.is_multi_frame:
+            message = self.tr.t("replace.frame_done", index=index + 1, frame=target_frame + 1)
+        else:
+            message = self.tr.t("replace.done", index=index + 1)
         self.set_status(message, "success")
         self.log("INFO", message)
         return True
@@ -1161,6 +1184,7 @@ class LogoBuilderApp:
             return
         self.block_list.update_block(index)
         self.preview.show_block(index)
+        self.preview.reset_frame()
         self._update_actions()
         self._update_title()
         self._update_status_info()
@@ -1180,15 +1204,24 @@ class LogoBuilderApp:
         if view is None or not view.is_image:
             self.set_status(self.tr.t("bootlogo.not_image_block"), "warning")
             return
-        image = session.image(index)
+        frame = self.preview.frame_index if view.is_multi_frame else 0
+        image = (
+            session.frame_image(index, frame) if view.is_multi_frame else session.image(index)
+        )
         if image is None:
             self.set_status(self.tr.t("preview.empty_canvas"), "warning")
             return
+        if view.is_multi_frame:
+            default_name = f"block_{index + 1:03d}_frame{frame + 1}.png"
+            dialog_title = self.tr.t("export.block_png_frame", index=index + 1, frame=frame + 1)
+        else:
+            default_name = f"block{index + 1}.png"
+            dialog_title = self.tr.t("export.block_png")
         path = filedialog.asksaveasfilename(
             parent=self.root,
-            title=self.tr.t("export.block_png"),
+            title=dialog_title,
             initialdir=self._default_export_dir(),
-            initialfile=f"block{index + 1}.png",
+            initialfile=default_name,
             defaultextension=".png",
             filetypes=[("PNG", "*.png"), (self.tr.t("open.filter_all"), "*.*")],
         )
@@ -1204,7 +1237,7 @@ class LogoBuilderApp:
         self.log("INFO", message)
         self.set_status(message, "success")
         if self.interactive:
-            SuccessDialog(self, title=self.tr.t("export.block_png"), path=Path(path)).show_modal()
+            SuccessDialog(self, title=dialog_title, path=Path(path)).show_modal()
 
     def copy_block_info(self, index: int | None = None) -> None:
         session = self.session
