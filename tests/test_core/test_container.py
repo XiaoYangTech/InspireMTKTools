@@ -508,15 +508,15 @@ def _pseudo_bytes(length: int, *, opaque_alpha: bool) -> bytes:
     return bytes(data)
 
 
-def test_ambiguous_length_opaque_bgra_detected_as_480x160x4():
-    """307200 字节同时对应 320x480x2 与 480x160x4；alpha 全 0xFF 应判为 BGRA。"""
+def test_ambiguous_length_opaque_bgra_detected_as_240x320x4():
+    """307200 字节同时对应 320x480x2/240x320x2 与 240x320x4；alpha 全 0xFF 应判为 BGRA。"""
     from helpers import make_container_bytes
 
     blob = make_container_bytes([_pseudo_bytes(320 * 480 * 2, opaque_alpha=True)])
     container = LogoContainer.parse(blob)
     block = container.blocks[0]
     assert isinstance(block, ImageBlock)
-    assert block.size == LogoSize(480, 160, 4)
+    assert block.size == LogoSize(240, 320, 4)
 
 
 def test_ambiguous_length_rgb565_detected_as_320x480x2():

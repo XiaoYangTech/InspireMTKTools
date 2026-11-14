@@ -131,6 +131,7 @@ def run_screenshot(app: Any, out_path: str | Path, repo_root: str | Path | None 
     shots_dir = repo_root / "analysis" / "ui_screenshots"
     results: list[Path] = []
     from . import demo
+    from . import session as session_mod
 
     print("=" * 72)
     print("亿方联发科工具箱 / InspireMTKTools v3.0.0 截图（--screenshot）")
@@ -142,7 +143,8 @@ def run_screenshot(app: Any, out_path: str | Path, repo_root: str | Path | None 
             container = demo.build_demo_container(core)
             source = tmp / "logo.bin"
             source.write_bytes(container.to_bytes())
-            app.load_container_sync(source)
+            # 用内存容器开会话以保留显式 frame_count（双帧示例不依赖文件解析启发式）
+            app._apply_session(session_mod.ContainerSession(container, source_path=source))
             if app.session is not None and app.session.count:
                 app.on_block_selected(0)
                 app.preview.set_zoom("fit")

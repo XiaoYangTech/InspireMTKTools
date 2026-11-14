@@ -34,7 +34,9 @@ def _noise(width: int, height: int) -> bytes:
 
 def test_pair_layout_detected_on_known_wide_block():
     blob = make_container_bytes([_draw_pair()])
-    container = LogoContainer.parse(blob)
+    container = LogoContainer.parse(
+        blob, block_sizes=[LogoSize(480, 160, 4)], detect_frames=True
+    )
     block = container.blocks[0]
     assert isinstance(block, ImageBlock)
     assert block.size == LogoSize(480, 160, 4)
@@ -55,7 +57,9 @@ def test_wide_block_with_different_halves_stays_single():
         pixels.extend(right[y * 240 * 4 : (y + 1) * 240 * 4])
     # 该长度 307200 在 sizes.txt 中对应 480x160x4；左右内容完全不同，不应拆帧
     blob = make_container_bytes([bytes(pixels)])
-    container = LogoContainer.parse(blob)
+    container = LogoContainer.parse(
+        blob, block_sizes=[LogoSize(480, 160, 4)], detect_frames=True
+    )
     block = container.blocks[0]
     assert isinstance(block, ImageBlock)
     assert block.frame_count == 1
@@ -74,7 +78,9 @@ def test_non_wide_block_is_not_split():
 
 def test_get_and_set_frame():
     blob = make_container_bytes([_draw_pair()])
-    container = LogoContainer.parse(blob)
+    container = LogoContainer.parse(
+        blob, block_sizes=[LogoSize(480, 160, 4)], detect_frames=True
+    )
     block = container.blocks[0]
     frame0_before = block.get_frame(0).tobytes()
     frame1_before = block.get_frame(1).tobytes()
@@ -91,7 +97,9 @@ def test_get_and_set_frame():
 
 def test_set_frame_index_validation():
     blob = make_container_bytes([_draw_pair()])
-    block = LogoContainer.parse(blob).blocks[0]
+    block = LogoContainer.parse(
+        blob, block_sizes=[LogoSize(480, 160, 4)], detect_frames=True
+    ).blocks[0]
     with pytest.raises(IndexError):
         block.set_frame(2, Image.new("RGBA", (240, 160)))
     with pytest.raises(IndexError):
@@ -100,7 +108,9 @@ def test_set_frame_index_validation():
 
 def test_unmodified_pair_block_repack_is_byte_identical():
     blob = make_container_bytes([_draw_pair()])
-    container = LogoContainer.parse(blob)
+    container = LogoContainer.parse(
+        blob, block_sizes=[LogoSize(480, 160, 4)], detect_frames=True
+    )
     assert container.to_bytes() == blob
 
 
@@ -108,7 +118,9 @@ def test_project_persists_frame_count(tmp_path):
     from logobuilder.core.project import LogoProject
 
     blob = make_container_bytes([_draw_pair()])
-    container = LogoContainer.parse(blob)
+    container = LogoContainer.parse(
+        blob, block_sizes=[LogoSize(480, 160, 4)], detect_frames=True
+    )
     project_dir = tmp_path / "proj"
     project = LogoProject.new(project_dir, container)
 
@@ -132,7 +144,15 @@ def test_sparse_but_different_content_not_split():
     draw.rectangle((180, 50, 220, 110), fill=(255, 255, 255, 255))
     pixels = pixel.image_to_pixels(canvas, LogoSize(480, 160, 4))
     blob = make_container_bytes([pixels])
-    container = LogoContainer.parse(blob)
+    container = LogoContainer.parse(
+        blob, block_sizes=[LogoSize(480, 160, 4)], detect_frames=True
+    )
     block = container.blocks[0]
     assert isinstance(block, ImageBlock)
     assert block.frame_count == 1
+
+def test_pair_detection_disabled_by_default():
+    """默认不自动拆双帧（避免把普通宽图误判成两帧），需显式 detect_frames=True。"""
+    blob = make_container_bytes([_draw_pair()])
+    container = LogoContainer.parse(blob, block_sizes=[LogoSize(480, 160, 4)])
+    assert container.blocks[0].frame_count == 1

@@ -79,6 +79,13 @@ def run_self_test(app: Any) -> int:
             steps += 1
 
             # 5. 左右双帧：预览帧切换、按帧替换、恢复整块
+            # 双帧标记来自显式 frame_count（实验性格式，默认不自动检测），
+            # 这里用内存容器直接开会话，避免落盘再解析丢失显式帧信息。
+            from . import session as session_mod
+            from .screenshot import wait_ui
+
+            app._apply_session(session_mod.ContainerSession(container))
+            wait_ui(app.root, 120)
             pair_view = next(
                 (
                     v

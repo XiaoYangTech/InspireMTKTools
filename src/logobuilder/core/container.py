@@ -620,11 +620,8 @@ class LogoContainer:
                 hint="请选择与块数据长度匹配的分辨率/色深，或把该分辨率加入 sizes.txt。",
                 context={"block_index": block_index, "actual": len(block.data), "expected": size.key},
             )
-        resolved_frames = (
-            int(frame_count)
-            if frame_count is not None
-            else _detect_frame_pair(block.data, size)
-        )
+        # 左右双帧是实验性格式：自动识别默认关闭，仅在显式传 frame_count 时启用
+        resolved_frames = int(frame_count) if frame_count is not None else 1
         image_block = ImageBlock(
             index=block_index,
             size=size,
@@ -672,8 +669,12 @@ class LogoContainer:
         path: Path | None = None,
         db: SizeDB | None = None,
         block_sizes: Sequence[LogoSize | None] | None = None,
+        detect_frames: bool = False,
     ) -> "LogoContainer":
         """解析 MTK LOGO 镜像字节。
+
+        ``detect_frames=True`` 时额外尝试检测"左右并排双帧"（实验性，MTK 常见格式
+        为单帧竖图，默认关闭，避免把普通宽图误判成两帧）。
 
         * magic 不符 -> :class:`NotLogoFile`；
         * magic 正确但 ``tag == "LOGO"`` 且块表损坏 -> :class:`CorruptContainer`；
@@ -720,6 +721,7 @@ class LogoContainer:
                 header_data_len=header_data_len,
                 db=database,
                 block_sizes=block_sizes,
+                detect_frames=detect_frames,
             )
             mode = "block-table"
             raw_payload = b""
@@ -771,6 +773,7 @@ class LogoContainer:
         header_data_len: int,
         db: SizeDB,
         block_sizes: Sequence[LogoSize | None] | None,
+        detect_frames: bool = False,
     ) -> tuple[list[Block], list[int], list[str], int]:
         """解析块表；返回 ``(blocks, pending, warnings, consumed_payload_len)``。"""
         available = len(blob) - HEADER_SIZE
@@ -862,7 +865,7 @@ class LogoContainer:
             end = offsets[index + 1] if index + 1 < count else payload_end
             raw = blob[HEADER_SIZE + start : HEADER_SIZE + end]
             block, is_pending, block_warnings = cls._build_block(
-                index, raw, db=db, block_sizes=block_sizes
+                index, raw, db=db, block_sizes=block_sizes, detect_frames=detect_frames
             )
             blocks.append(block)
             if is_pending:
@@ -878,6 +881,7 @@ class LogoContainer:
         *,
         db: SizeDB,
         block_sizes: Sequence[LogoSize | None] | None,
+        detect_frames: bool = False,
     ) -> tuple[Block, bool, list[str]]:
         """解压一个块并尽可能推断尺寸。"""
         try:
@@ -936,7 +940,7 @@ class LogoContainer:
                             size = max(rgb565, key=lambda c: c.score).size
 
         if size is not None:
-            frame_count = _detect_frame_pair(decompressed, size)
+            frame_count = _detect_frame_pair(decompressed, size) if detect_frames else 1
             block = ImageBlock(
                 index=index,
                 size=size,
@@ -954,8 +958,14 @@ class LogoContainer:
 
     # -- 文件 IO -------------------------------------------------------
     @classmethod
-    def load(cls, path: str | Path, *, db: SizeDB | None = None) -> "LogoContainer":
-        """读取并解析镜像文件。"""
+    def load(
+        cls,
+        path: str | Path,
+        *,
+        db: SizeDB | None = None,
+        detect_frames: bool = False,
+    ) -> "LogoContainer":
+        """读取并解析镜像文件（``detect_frames`` 见 :meth:`parse`）。"""
         target = Path(path)
         try:
             data = target.read_bytes()
@@ -965,7 +975,7 @@ class LogoContainer:
                 hint="请检查文件是否存在、路径是否正确、是否有读取权限。",
                 context={"path": str(target)},
             ) from exc
-        return cls.parse(data, path=target, db=db)
+        return cls.parse(data, path=target, db=db, detect_frames=detect_frames)
 
     # -- 调试/信息 -----------------------------------------------------
     def summary(self) -> dict[str, Any]:

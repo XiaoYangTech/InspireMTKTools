@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 
 from logobuilder.ui import demo
+from logobuilder.ui import session as session_mod
 
 PAIR_WIDTH = 480
 PAIR_HEIGHT = 160
@@ -21,7 +22,9 @@ def loaded(app, core, tmp_path):
     container = demo.build_demo_container(core)
     source = tmp_path / "logo.bin"
     source.write_bytes(container.to_bytes())
-    session = app.load_container_sync(source)
+    # 用内存容器直接开会话：双帧标记来自显式 frame_count，不依赖文件解析启发式
+    session = session_mod.ContainerSession(container, source_path=source)
+    app._apply_session(session)
     app.root.update_idletasks()
     app.root.update()
     return app, session
@@ -173,9 +176,9 @@ def test_export_current_frame_png(loaded, tmp_path, monkeypatch):
 # ── 项目会话 ──────────────────────────────────────────────
 def test_project_session_replace_frame(loaded, tmp_path):
     app, session = loaded
-    source = session.source_path
     project_dir = tmp_path / "project"
-    project = app.create_project_sync(source, project_dir)
+    project = session_mod.new_project(project_dir, session.container)
+    app._apply_session(project)
     assert project.mode == "project"
     view = _pair_view(project)
     assert view.frame_count == 2
@@ -198,7 +201,8 @@ def test_project_session_replace_frame(loaded, tmp_path):
 def test_project_open_preserves_frames(loaded, tmp_path):
     app, session = loaded
     project_dir = tmp_path / "project"
-    app.create_project_sync(session.source_path, project_dir)
+    project = session_mod.new_project(project_dir, session.container)
+    app._apply_session(project)
     reopened = app.open_project_sync(project_dir)
     view = _pair_view(reopened)
     assert view.frame_count == 2

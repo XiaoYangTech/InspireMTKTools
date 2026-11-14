@@ -183,7 +183,7 @@ dist/LogoBuilder2.exe                    # PyInstaller onefile
 - `tests/test_core`：容器/像素/尺寸/工程/zip/CLI/bootlogo/错误/API 契约，覆盖真实样本与合成夹具（bpp2/bpp4/混合/损坏）。
 - `tests/integration`（QA 独立 oracle）：78/78 绿，含字节回包、zip 结构、GUI 全流程、lk raw、pad、损坏输入。
 - `tests/test_ui`：GUI 冒烟/对话框/DPI/i18n/成像/导出路径。
-- 全量（交付前最终验收）：**467 passed, 1 skipped, 0 failed**（skip = 小屏 compact 模式契约行为；含 core、QA integration、UI/会话/LK 等）
+- 全量（交付前最终验收）：**468 passed, 1 skipped, 0 failed**（skip = 小屏 compact 模式契约行为；含 core、QA integration、UI/会话/LK 等）
 - 连续多轮运行稳定；GUI 截图、自检、冻结 exe 自检均通过。
 
 ---
@@ -292,26 +292,27 @@ python tools/build_exe.py
 - 同长度歧义（307200 字节 = 320x480x2 = 480x160x4）：新增 alpha 判别（不透明 BGRA 优先），并新增 `480x160x4` 尺寸表条目；
   未登记长度保持"待定"交给用户确认，避免误判；`pad_to_size=8388608` 重包与原文件逐字节一致。
 
-## 12.3 左右双帧布局适配（v3.0.0 增量）
+## 12.3 竖屏单帧解析修正 + 双帧实验支持（v3.0.0 增量）
 
-- 用户样本 `logo.img`（SHA-256 `055aa581…1cf2`）包含 18 个 `480x160x4` 块，实为左右各 1 帧 `240x160x4`
-  （块 0/38 = 开机“两对话框”LOGO，两者逐字节相同；两帧像素 96.3% 相同、约 1px 位置差）。
-- 核心：`ImageBlock.frame_count/frame_width/frame_size/frames()/get_frame()/set_frame()`；解析时自动检测
-  （宽高比≥2、左右相似度≥90%）；`ProjectBlock.frame_count` 持久化到 project.json（`"frames": 2`）。
-- CLI：`info` 显示“左右2帧，每帧 240x160x4”；`extract/pack` 保持帧信息，`extract→pack --pad-to 8388608`
-  与原文件 **SHA-256 完全一致**（已验证）。
-- GUI：块列表显示“尺寸 · N帧（每帧 W×H）”，预览面板帧选择（帧1/帧2）只绘制当前帧，替换图片按单帧尺寸并只改当前帧，导出 PNG 导出当前帧，信息卡新增“帧布局”行；项目重开保留帧数（project.json `"frames": 2`）。
+- **重要修正**：用户真实 `logo.img`（SHA-256 `055aa581…1cf2`）的 18 个图像块实际是 **`240x320x4` BGRA 竖屏单帧**
+  （307200 B = 240×320×4），与设备“开机动画竖着”一致；此前误判为 `480x160x4` 左右双帧，原因是内置
+  `sizes.txt` 缺少 `240x320x4`（只有 `240x320x2`/`320x480x2`），且曾误加 `480x160x4`。
+- 修正内容：`sizes.txt` **增加 `240x320x4`、移除 `480x160x4`**；不透明 BGRA 仍按 alpha 字节优先判别；
+  `extract→pack --pad-to 8388608` 与原文件 **SHA-256 一致**（已验证）。
+- “左右双帧”保留为**实验性格式**：`ImageBlock.frame_count/frames()/get_frame()/set_frame()`，
+  仅显式 `frame_count=2` 或 `parse(detect_frames=True)` 时启用（默认关闭，防止把普通宽图误判成两帧）；
+  GUI 对显式双帧块提供帧选择/按帧替换/按帧导出（合成示例截图 `frame_pair.png`）。
 
 ## 13. 验证记录（第二轮，Lead 最终验收实测）
 
 | 项 | 命令/方法 | 结果 |
 |---|---|---|
-| 全量测试 | `PYTHONPATH=src python -X utf8 -m pytest tests -q` | **467 passed, 1 skipped, 0 failed**（bootstrap-light 中文界面版；skip 为小屏 compact 预期） |
+| 全量测试 | `PYTHONPATH=src python -X utf8 -m pytest tests -q` | **468 passed, 1 skipped, 0 failed**（bootstrap-light 中文界面版；skip 为小屏 compact 预期） |
 | LK 核心单测 | `pytest tests/test_core/test_lkpatch.py -q` | **32 passed**（合成 ARM32/AArch64、真实 lk_a/lk_b、负样本、guard 保护、自定义规则、备份还原、CLI、capstone 缺失回退） |
 | LK 集成 E2E | `pytest tests/integration/test_lkpatch_e2e.py -q` | **32 passed**（真实样本 2 findings、补丁字节、header/guard 不变、原始 sha 不变、verify PASS、备份/还原、fail-safe） |
 | GUI 测试 | `pytest tests/test_ui -q` | **63 passed, 1 skipped**（含 LK 面板 10 用例） |
 | GUI 自检 | `python -X utf8 app.py --self-test` | **15/15 通过，exit 0**（含 LK 扫描→dry-run→应用→校验→还原） |
-| 冻结 exe | `dist/InspireMTKTools.exe --self-test` | **16/16 通过，exit 0**；37,760,614 B，SHA-256 `85008722d05d21a2784f600a7078308c09bacc39cc49eeac0c3ba93bb1aaeac9`（bootstrap-light + 双帧界面版） |
+| 冻结 exe | `dist/InspireMTKTools.exe --self-test` | **16/16 通过，exit 0**；37,760,138 B，SHA-256 `59e55dec4047ef910458726e45ff4c03b62baa2bc2bd63c52eb2d7351d0a8865`（bootstrap-light + 竖屏240x320修正版） |
 | 真实 AArch64 样本 | `lk-info/lk-patch/lk-verify/lk-restore`（lk_a/lk_b） | verdict=supported-aarch64、finding 2 个（0x4CC58 dm_verity 0.95、0x4D928 orange_state 0.98），补丁 `e0031f2ac0035fd6` → `mov w0,wzr; ret`，patch_ok=True，原文件 SHA 不变 |
 | ARM32 特征码 | 合成 fixture | 7 条内置规则全部命中，补丁 `00207047`，header/guard 不变 |
 | Logo 回归 | 真实 logo.bin extract→pack | 输出 SHA-256 `c321a9f1…655c` **与原文件字节级一致**（功能未回归） |
