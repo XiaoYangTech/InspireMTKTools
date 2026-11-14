@@ -17,6 +17,13 @@ git clone https://github.com/XiaoYangTech/InspireMTKTools.git      # 或
 git clone https://cnb.cool/InspireWorks/InspireMTKTools.git
 ```
 
+## 下载（Releases）
+
+- **GitHub Releases**：<https://github.com/XiaoYangTech/InspireMTKTools/releases>（Windows 单文件 `InspireMTKTools.exe`）
+- **CNB Releases**：<https://cnb.cool/InspireWorks/InspireMTKTools/-/releases>（同一 exe，国内加速下载）
+
+> 两个仓库的 Release 附件内容一致（同一 SHA-256），任选其一即可。
+
 ---
 
 ## 界面预览
