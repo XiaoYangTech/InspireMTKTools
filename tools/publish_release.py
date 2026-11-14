@@ -78,7 +78,13 @@ def api(url: str, token: str, *, method: str = "GET", payload: dict | None = Non
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
-            return resp.status, json.loads(resp.read().decode("utf-8", "replace"))
+            raw = resp.read().decode("utf-8", "replace")
+            if not raw.strip():
+                return resp.status, {}
+            try:
+                return resp.status, json.loads(raw)
+            except json.JSONDecodeError:
+                return resp.status, raw
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", "replace")
         try:
